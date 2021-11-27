@@ -1,0 +1,5 @@
+BasedOnStyle: Microsoft
+
+AllowShortFunctionsOnASingleLine: All
+ColumnLimit: 0
+PointerAlignment: Left
