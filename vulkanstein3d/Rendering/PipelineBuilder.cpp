@@ -1,3 +1,5 @@
+#include "../Common.h"
+
 #include "PipelineBuilder.h"
 
 #include <fstream>
@@ -55,9 +57,10 @@ PipelineBuilder& PipelineBuilder::SetRenderpass(vk::RenderPass renderPass)
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::SetPipelineLayout(vk::PipelineLayout layout)
+PipelineBuilder& PipelineBuilder::SetLayouts(vk::PipelineLayout layout, vk::DescriptorSetLayout descriptorLayout)
 {
     _pipelineLayout = layout;
+    _descriptorLayout = descriptorLayout;
     return *this;
 }
 
@@ -73,11 +76,11 @@ PipelineBuilder& PipelineBuilder::SetDynamicState(const std::vector<vk::DynamicS
     return *this;
 }
 
-Pipeline PipelineBuilder::Build(std::shared_ptr<Device> device)
+std::shared_ptr<Pipeline> PipelineBuilder::Build(std::shared_ptr<Device> device)
 {
     _device = device;
 
-    std::vector bindings{vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr}};
+    /* std::vector bindings{vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr}};
 
     std::vector<vk::DescriptorBindingFlags> descriptorBindingFlags = {vk::DescriptorBindingFlagBits::eVariableDescriptorCount};
 
@@ -96,7 +99,7 @@ Pipeline PipelineBuilder::Build(std::shared_ptr<Device> device)
         pushConstantRanges.push_back(vk::PushConstantRange{vk::ShaderStageFlagBits::eAllGraphics, 0, _pushConstantSize});
     }
 
-    _pipelineLayout = _device->Get().createPipelineLayout({{}, descriptorSetLayouts, pushConstantRanges}).value;
+    _pipelineLayout = _device->Get().createPipelineLayout({{}, descriptorSetLayouts, pushConstantRanges}).value;*/
 
     const vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{{}, _bindingDescriptions, _vertexAttributes};
 
@@ -163,7 +166,7 @@ Pipeline PipelineBuilder::Build(std::shared_ptr<Device> device)
     _device->Get().destroyShaderModule(vertShaderModule);
     _device->Get().destroyShaderModule(fragShaderModule);
 
-    return Pipeline{pipeline, _pipelineLayout, descriptorSetLayout};
+    return std::make_shared<Pipeline>(pipeline, _pipelineLayout, _descriptorLayout);
 }
 
 vk::ShaderModule PipelineBuilder::LoadShaderFile(const std::string& shaderFile)
@@ -181,6 +184,12 @@ vk::ShaderModule PipelineBuilder::LoadShaderFile(const std::string& shaderFile)
     file.read((char*)codeBuffer.data(), fileSize);
 
     auto [result, shaderModule] = _device->Get().createShaderModule({{}, codeBuffer});
+
+    if (result != vk::Result::eSuccess)
+    {
+        spdlog::error("[Vulkan] LoadShaderFile: {}", result);
+        return {};
+    }
 
     return shaderModule;
 }

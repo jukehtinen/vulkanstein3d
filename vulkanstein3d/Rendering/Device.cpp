@@ -1,5 +1,6 @@
-#include "Device.h"
+#include "../Common.h"
 
+#include "Device.h"
 #define VMA_IMPLEMENTATION
 #include "vk_mem_alloc.h"
 
@@ -10,14 +11,31 @@ namespace Rendering
 static const std::vector<const char*> requiredDeviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME};
 
-Device::Device(vk::PhysicalDevice physicalDevice, vk::Device device, vk::Queue graphicQueue, VmaAllocator allocator)
-    : _physicalDevice(physicalDevice), _device(device), _graphicQueue(graphicQueue), _allocator(allocator)
+Device::Device(vk::PhysicalDevice physicalDevice, vk::Device device, vk::Queue graphicsQueue, VmaAllocator allocator)
+    : _physicalDevice(physicalDevice), _device(device), _graphicsQueue(graphicsQueue), _allocator(allocator)
 {
 }
 
 Device::~Device()
 {
     _device.destroy();
+}
+
+void Device::RunCommandsSync(std::function<void(vk::CommandBuffer)> func)
+{
+    auto commandPool = _device.createCommandPool({vk::CommandPoolCreateFlagBits::eResetCommandBuffer}).value;
+    auto commandBuffer = _device.allocateCommandBuffers({commandPool, vk::CommandBufferLevel::ePrimary, 1}).value.front();
+
+    commandBuffer.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    func(commandBuffer);
+    commandBuffer.end();
+
+    const vk::CommandBufferSubmitInfoKHR cmdBufferSubmit{commandBuffer};
+    const vk::SubmitInfo2KHR submitInfo{{}, 0, nullptr, 1, &cmdBufferSubmit, 0, nullptr};
+    _graphicsQueue.submit2KHR(1, &submitInfo, {});
+    _graphicsQueue.waitIdle();
+
+    _device.destroyCommandPool(commandPool);
 }
 
 static bool ValidateRequirements(vk::PhysicalDevice physicalDevice)

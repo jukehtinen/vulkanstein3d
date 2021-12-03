@@ -1,3 +1,5 @@
+#include "../Common.h"
+
 #include "Instance.h"
 #include "../App/Window.h"
 

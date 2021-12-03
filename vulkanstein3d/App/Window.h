@@ -1,16 +1,5 @@
 #pragma once
 
-#define VULKAN_HPP_NO_EXCEPTIONS
-#define VULKAN_HPP_ASSERT_ON_RESULT
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-#include "vulkan/vulkan.hpp"
-
-#include "GLFW/glfw3.h"
-#ifdef _WIN32
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include "GLFW/glfw3native.h"
-#endif
-
 namespace App
 {
 class Window

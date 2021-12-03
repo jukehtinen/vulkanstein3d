@@ -13,6 +13,8 @@ add_executable (vulkanstein3d
     "App/Input.cpp"
     "App/Window.cpp"
     "Game/Assets.cpp"
+    "Game/MeshGenerator.cpp"
+    "Rendering/Buffer.cpp"
     "Rendering/Device.cpp"
     "Rendering/Instance.cpp" 
     "Rendering/MaterialBuilder.cpp"

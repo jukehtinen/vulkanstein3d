@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <vector>
 
@@ -32,12 +33,22 @@ struct Bitmap
     int layers{};
 };
 
+struct Map
+{
+    std::array<std::vector<uint16_t>, 2> tiles;
+    int width{};
+};
+
 class Loaders
 {
   public:
     Loaders(const std::filesystem::path& dataPath);
 
     Bitmap LoadPictureTexture(Pictures picture);
+    Bitmap LoadWallTexture(int index);
+    Map LoadMap(int episode, int level);
+
+
 
   private:
     std::filesystem::path _dataPath;

@@ -1,3 +1,5 @@
+#include "../Common.h"
+
 #include "Swapchain.h"
 
 namespace Rendering

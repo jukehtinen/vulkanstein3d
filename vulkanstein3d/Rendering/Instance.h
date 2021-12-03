@@ -1,15 +1,5 @@
 #pragma once
 
-#define VULKAN_HPP_NO_EXCEPTIONS
-#define VULKAN_HPP_ASSERT_ON_RESULT
-#define VULKAN_HPP_DISPATCH_LOADER_DYNAMIC 1
-#include "vk_mem_alloc.h"
-#include "vulkan/vulkan.hpp"
-
-#include "spdlog/spdlog.h"
-
-#include <memory>
-
 namespace App
 {
 class Window;

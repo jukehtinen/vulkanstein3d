@@ -26,12 +26,12 @@ class PipelineBuilder
     PipelineBuilder& SetDepthState(bool depthTest, bool depthWrite);
     PipelineBuilder& SetBlend(bool enable);
     PipelineBuilder& SetRenderpass(vk::RenderPass renderPass);
-    PipelineBuilder& SetPipelineLayout(vk::PipelineLayout layout);
+    PipelineBuilder& SetLayouts(vk::PipelineLayout layout, vk::DescriptorSetLayout descriptorLayout);
     PipelineBuilder& SetPushConstants(uint32_t size);
     PipelineBuilder& SetDynamicState(const std::vector<vk::DynamicState>& dynamicState);
     PipelineBuilder& SetRasterization(vk::CullModeFlags cullMode, vk::FrontFace frontFace);
 
-    Pipeline Build(std::shared_ptr<Device> device);
+    std::shared_ptr<Pipeline> Build(std::shared_ptr<Device> device);
 
   private:
     PipelineBuilder();
@@ -42,6 +42,7 @@ class PipelineBuilder
     std::shared_ptr<Device> _device;
     vk::RenderPass _renderPass{};
     vk::PipelineLayout _pipelineLayout{};
+    vk::DescriptorSetLayout _descriptorLayout{};
 
     std::string _vertFile;
     std::string _fragFile;

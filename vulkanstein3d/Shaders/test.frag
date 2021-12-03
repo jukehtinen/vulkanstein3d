@@ -12,6 +12,7 @@ layout(push_constant) uniform FrameConstants
     float mousexNormalized;
     float mouseyNormalized;
     float padding;
+    mat4 mvp;
 } consts;
 
 void main()  

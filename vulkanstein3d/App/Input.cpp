@@ -1,3 +1,5 @@
+#include "../Common.h"
+
 #include "Input.h"
 #include "Window.h"
 
