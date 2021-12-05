@@ -53,7 +53,7 @@ class PipelineBuilder
     bool _isDepthWrite{true};
     bool _isBlending{false};
     uint32_t _pushConstantSize{};
-    vk::CullModeFlags _cullMode{vk::CullModeFlagBits::eNone};
+    vk::CullModeFlags _cullMode{vk::CullModeFlagBits::eBack};
     vk::FrontFace _frontFace{vk::FrontFace::eCounterClockwise};
     std::vector<vk::DynamicState> _dynamicState{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
 };

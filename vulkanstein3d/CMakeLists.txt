@@ -8,12 +8,13 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(unofficial-vulkan-memory-allocator CONFIG REQUIRED)
 find_package(Vulkan REQUIRED)
 
-add_executable (vulkanstein3d 
+add_executable (vulkanstein3d
     "Main.cpp"
     "App/Input.cpp"
     "App/Window.cpp"
     "Game/Assets.cpp"
     "Game/MeshGenerator.cpp"
+    "Game/PlayerController.cpp"
     "Rendering/Buffer.cpp"
     "Rendering/Device.cpp"
     "Rendering/Instance.cpp" 
@@ -25,6 +26,7 @@ add_executable (vulkanstein3d
 )
 
 target_include_directories(vulkanstein3d PRIVATE
+    . ..
     ${Vulkan_INCLUDE_DIR}
 )
 

@@ -1,7 +1,7 @@
 #include "../Common.h"
 
-#include "Window.h"
 #include "Input.h"
+#include "Window.h"
 
 #include "spdlog/spdlog.h"
 
@@ -10,8 +10,7 @@ namespace App
 Window::Window(int width, int height)
     : _width(width), _height(height)
 {
-    glfwSetErrorCallback(
-        [](int code, const char* message) { spdlog::error("[glfw] Error: '{}', Message: '{}'", code, message); });
+    glfwSetErrorCallback([](int code, const char* message) { spdlog::error("[glfw] Error: '{}', Message: '{}'", code, message); });
     glfwInit();
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);

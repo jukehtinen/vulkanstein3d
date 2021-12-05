@@ -55,17 +55,21 @@ static void GenerateCube(Vertex* verts, uint32_t* indices, uint32_t tileId)
 Game::Mesh MeshGenerator::BuildFloorPlaneMesh(std::shared_ptr<Rendering::Device> device, int size)
 {
     const glm::vec3 normal{0.0f, 1.0f, 0.0f};
-    const uint32_t quadIndices[] = {0, 1, 2, 1, 3, 2};
+    const uint32_t quadIndices[] = {0, 2, 1, 1, 2, 3};
 
     std::vector<Vertex> verts(size * size * 4);
     std::vector<uint32_t> indices(size * size * 6);
 
     for (int i = 0; i < size * size; i++)
     {
-        verts[i * 4 + 0] = {glm::vec3{0.0f, 0.0f, 0.0f}, normal, glm::vec3{0.0f, 0.0f, 0.0f}};
-        verts[i * 4 + 1] = {glm::vec3{1.0f, 0.0f, 0.0f}, normal, glm::vec3{1.0f, 0.0f, 0.0f}};
-        verts[i * 4 + 2] = {glm::vec3{0.0f, 0.0f, 1.0f}, normal, glm::vec3{0.0f, 1.0f, 0.0f}};
-        verts[i * 4 + 3] = {glm::vec3{1.0f, 0.0f, 1.0f}, normal, glm::vec3{1.0f, 1.0f, 0.0f}};
+        float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        float g = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        float b = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+
+        verts[i * 4 + 0] = {glm::vec3{0.0f, 0.0f, 0.0f}, normal, glm::vec3{r, g, b}};
+        verts[i * 4 + 1] = {glm::vec3{1.0f, 0.0f, 0.0f}, normal, glm::vec3{r, g, b}};
+        verts[i * 4 + 2] = {glm::vec3{0.0f, 0.0f, 1.0f}, normal, glm::vec3{r, g, b}};
+        verts[i * 4 + 3] = {glm::vec3{1.0f, 0.0f, 1.0f}, normal, glm::vec3{r, g, b}};
 
         for (auto v = 0; v < 4; v++)
         {

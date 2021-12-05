@@ -4,6 +4,7 @@
 #include "App/Window.h"
 #include "Game/Assets.h"
 #include "Game/MeshGenerator.h"
+#include "Game/PlayerController.h"
 #include "Rendering/Buffer.h"
 #include "Rendering/Device.h"
 #include "Rendering/Instance.h"
@@ -130,6 +131,27 @@ std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std:
     return materials;
 }
 
+bool CircleRectIntersect(const glm::vec2& circle, float r, const glm::vec4& rect)
+{
+    auto circleDistancex = glm::abs(circle.x - rect.x);
+    auto circleDistancey = glm::abs(circle.y - rect.y);
+
+    if (circleDistancex > (rect.z / 2 + r))
+        return false;
+    if (circleDistancey > (rect.w / 2 + r))
+        return false;
+
+    if (circleDistancex <= (rect.z / 2))
+        return true;
+
+    if (circleDistancey <= (rect.w / 2))
+        return true;
+
+    auto cornerDistance_sq = glm::pow((circleDistancex - rect.z / 2), 2.0f) + glm::pow((circleDistancey - rect.w / 2), 2.0f);
+
+    return (cornerDistance_sq <= glm::pow(r, 2.0f));
+}
+
 int main(int argc, char* argv[])
 {
     spdlog::set_level(spdlog::level::debug);
@@ -171,11 +193,17 @@ int main(int argc, char* argv[])
     auto groundMaterial = materials["ground"];
     auto mapMaterial = materials["map"];
 
-    Wolf3dLoaders::Loaders loaders{ dataPath };
+    Wolf3dLoaders::Loaders loaders{dataPath};
     auto map = loaders.LoadMap(1, 1);
+
+    Game::PlayerController player{glm::vec3{map.playerStart % map.width * 10.0f, 35.5f, map.playerStart / map.width * 10.0f}};
+
+    glm::vec3 cubePos{map.playerStart % map.width * 10.0f + 5.0f, 5.5f, map.playerStart / map.width * 10.0f + 5.0f};
+    float cubeAngleRad = 0.0f;    
 
     auto groundMesh = Game::MeshGenerator::BuildFloorPlaneMesh(device, map.width);
     auto mapMesh = Game::MeshGenerator::BuildMapMesh(device, map);
+    auto cubeMesh = Game::MeshGenerator::BuildCubeMesh(device);
 
     vk::Fence renderFence = dev.createFence({vk::FenceCreateFlagBits::eSignaled}).value;
     vk::Semaphore presentSemaphore = dev.createSemaphore({}).value;
@@ -216,8 +244,38 @@ int main(int argc, char* argv[])
         auto delta = timeSpan.count();
         totalTime += delta;
 
-        auto mousepos = App::Input::The().GetMousePos();
+        player.Update(static_cast<float>(delta));
+
+        auto& input = App::Input::The();
+        auto mousepos = input.GetMousePos();
         FrameConstants consts{(float)totalTime, (float)mousepos.x / (float)swapchain->GetExtent().width, (float)mousepos.y / (float)swapchain->GetExtent().height, 0.0f};
+
+        glm::vec3 cubeDir{glm::cos(cubeAngleRad), 0.0f, glm::sin(cubeAngleRad)};
+        auto prevPos = cubePos;
+        glm::vec3 newPos = cubePos;
+        if (input.IsKeyDown(GLFW_KEY_UP))
+            newPos = cubePos + cubeDir * (float)delta * 50.0f;
+        if (input.IsKeyDown(GLFW_KEY_DOWN))
+            newPos = cubePos - cubeDir * (float)delta * 50.0f;
+        if (input.IsKeyDown(GLFW_KEY_LEFT))
+            cubeAngleRad -= (float)delta * 5.0f;
+        if (input.IsKeyDown(GLFW_KEY_RIGHT))
+            cubeAngleRad += (float)delta * 5.0f;
+
+        cubePos.x = newPos.x;
+        for (int i = 0; i < map.tiles[0].size(); i++)
+        {
+            glm::vec4 rect{i % map.width * 10.0f + 5.0f, i / map.width * 10.0f + 5.0f, 10.0f, 10.0f};
+            if (map.tiles[0][i] < 108 && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
+                cubePos.x = prevPos.x;
+        }
+        cubePos.z = newPos.z;
+        for (int i = 0; i < map.tiles[0].size(); i++)
+        {
+            glm::vec4 rect{i % map.width * 10.0f + 5.0f, i / map.width * 10.0f + 5.0f, 10.0f, 10.0f};
+            if (map.tiles[0][i] < 108 && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
+                cubePos.z = prevPos.z;
+        }
 
         dev.waitForFences(1, &renderFence, VK_TRUE, UINT64_MAX);
         dev.resetFences(1, &renderFence);
@@ -251,17 +309,15 @@ int main(int argc, char* argv[])
         /*commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, testMaterial->_pipeline->pipeline);
         commandBuffer.pushConstants(testMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants), &consts);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, testMaterial->_pipeline->pipelineLayout, 0, 1, &testMaterial->_descriptorSet, 0, nullptr);
-        commandBuffer.draw(3, 1, 0, 0);*/
+        commandBuffer.draw(3, 1, 0, 0);*/        
 
-        static float angle = 0.0f;
-        angle += 0.6f * delta;
-
-        auto view = glm::lookAt(glm::vec3(10.0f, 50.0f, 10.0f), glm::vec3(30.0f, 0.0f, 30.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        auto view = player.GetViewMatrix();
         auto proj = glm::perspective(glm::radians(45.0f), swapchain->GetExtent().width / (float)swapchain->GetExtent().height, 0.1f, 1000.0f);
-        auto model = glm::translate(glm::mat4{1.0f}, {30.0f, 0.0f, 30.0f}) * glm::rotate(glm::mat4{1.0f}, angle, {0.0f, 1.0f, 0.0f}) * glm::translate(glm::mat4{1.0f}, {-30.0f, 0.0f, -30.0f});
 
-        consts.mvp = proj * view * model;
+        if (input.IsKeyDown(GLFW_KEY_TAB))
+            view = glm::lookAt(cubePos, cubePos + cubeDir, {0.0f, 1.0f, 0.0f});
 
+        consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipeline);
         //commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipelineLayout, 0, 1, &groundMaterial->_descriptorSet, 0, nullptr);
         commandBuffer.pushConstants(groundMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants), &consts);
@@ -271,14 +327,23 @@ int main(int argc, char* argv[])
         commandBuffer.bindIndexBuffer(groundMesh.indexBuffer->Get(), 0, vk::IndexType::eUint32);
         commandBuffer.drawIndexed(groundMesh.indexCount, 1, 0, 0, 0);
 
+        consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f}) * glm::translate(glm::mat4{1.0f}, glm::vec3{0.5, 0.0f, 0.5f});
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
         commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants), &consts);
         vk::Buffer vertexBuffers2[] = {mapMesh.vertexBuffer->Get()};
-        //vk::DeviceSize offsets[] = { 0 };
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers2, offsets);
         commandBuffer.bindIndexBuffer(mapMesh.indexBuffer->Get(), 0, vk::IndexType::eUint32);
         commandBuffer.drawIndexed(mapMesh.indexCount, 1, 0, 0, 0);
+
+        consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, cubePos) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
+        commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants), &consts);
+        vk::Buffer vertexBuffers3[] = {cubeMesh.vertexBuffer->Get()};
+        commandBuffer.bindVertexBuffers(0, 1, vertexBuffers3, offsets);
+        commandBuffer.bindIndexBuffer(cubeMesh.indexBuffer->Get(), 0, vk::IndexType::eUint32);
+        commandBuffer.drawIndexed(cubeMesh.indexCount, 1, 0, 0, 0);
 
         commandBuffer.endRenderPass();
 

@@ -37,6 +37,7 @@ struct Map
 {
     std::array<std::vector<uint16_t>, 2> tiles;
     int width{};
+    int playerStart{};
 };
 
 class Loaders

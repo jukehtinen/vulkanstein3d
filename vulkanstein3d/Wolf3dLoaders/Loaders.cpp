@@ -361,6 +361,7 @@ Map Loaders::LoadMap(int episode, int level)
         RLEWexpand((reinterpret_cast<uint16_t*>(expandBuffer.data())) + 1, reinterpret_cast<uint16_t*>(map.tiles[plane].data()), mapSize, mapHeader.rlewMagic);
     }
 
+    // Wolf has two images per tile (light and dark). Use only light version.
     for (int i = 0; i < map.tiles[0].size(); i++)
     {
         auto tileindex = map.tiles[0][i];
@@ -370,7 +371,14 @@ Map Loaders::LoadMap(int episode, int level)
             tileindex++;
         map.tiles[0][i] = tileindex;
     }
-   
+
+    for (int i = 0; i < map.tiles[1].size(); i++)
+    {
+        auto tileindex = map.tiles[1][i];
+        if (tileindex == 19 || tileindex == 20 || tileindex == 21 || tileindex == 22)
+            map.playerStart = i;
+    }
+
     return map;
 }
 
