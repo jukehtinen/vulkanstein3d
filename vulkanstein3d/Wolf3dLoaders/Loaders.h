@@ -46,10 +46,9 @@ class Loaders
     Loaders(const std::filesystem::path& dataPath);
 
     Bitmap LoadPictureTexture(Pictures picture);
-    Bitmap LoadWallTexture(int index);
+    Bitmap LoadWallTextures();
+    Bitmap LoadSpriteTextures();
     Map LoadMap(int episode, int level);
-
-
 
   private:
     std::filesystem::path _dataPath;

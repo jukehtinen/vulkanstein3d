@@ -26,6 +26,22 @@ struct FrameConstants
     glm::mat4 mvp{1.0f};
 };
 
+struct FrameConstantsUBO
+{
+    glm::mat4 view{1.0f};
+    glm::mat4 projection{1.0f};
+    float time;
+    float mousexNormalized;
+    float mouseyNormalized;
+    float padding;
+};
+
+struct Sprite
+{
+    glm::mat4 model{1.0f};
+    glm::vec4 data;
+};
+
 std::vector<vk::Framebuffer> CreateFramebuffers(std::shared_ptr<Rendering::Device> device, std::shared_ptr<Rendering::Swapchain> swapchain, vk::RenderPass renderPass, std::shared_ptr<Rendering::Texture> depthTexture)
 {
     auto& images = swapchain->GetImages();
@@ -39,7 +55,8 @@ std::vector<vk::Framebuffer> CreateFramebuffers(std::shared_ptr<Rendering::Devic
     return frameBuffers;
 }
 
-std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass renderPass, Game::Assets& assets)
+std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass renderPass, Game::Assets& assets,
+                                                                            std::shared_ptr<Rendering::Buffer> frameUbo, std::shared_ptr<Rendering::Buffer> storage)
 {
     // Hackyti-hax. Create layouts from reflected json files.
 
@@ -103,6 +120,33 @@ std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std:
                                .SetPipeline(testPipeline)
                                .SetTexture(assets._textures[1])
                                .Build(device);
+    }
+
+    {
+        std::vector bindings{vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr},
+                             vk::DescriptorSetLayoutBinding{1, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex, nullptr},
+                             vk::DescriptorSetLayoutBinding{2, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eVertex, nullptr}};
+
+        vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{{}, bindings};
+
+        auto descriptorSetLayout = device->Get().createDescriptorSetLayout(descriptorSetLayoutCreateInfo).value;
+
+        std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{descriptorSetLayout};
+
+        auto pipelineLayout = device->Get().createPipelineLayout({{}, descriptorSetLayouts, {}}).value;
+
+        auto testPipeline = Rendering::PipelineBuilder::Builder()
+                                .SetRenderpass(renderPass)
+                                .SetLayouts(pipelineLayout, descriptorSetLayout)
+                                .SetShaders("Shaders/mat_sprite.vert.spv", "Shaders/mat_sprite.frag.spv")
+                                .SetBlend(true)
+                                .Build(device);
+
+        materials["sprites"] = Rendering::MaterialBuilder::Builder()
+                                   .SetPipeline(testPipeline)
+                                   .SetTexture(assets._textures[2])
+                                   .SetUboHack(frameUbo, storage)
+                                   .Build(device);
     }
 
     {
@@ -187,23 +231,40 @@ int main(int argc, char* argv[])
 
     Game::Assets assets{device, dataPath};
 
-    auto materials = CreateMaterials(device, renderPass, assets);
-
-    auto testMaterial = materials["test"];
-    auto groundMaterial = materials["ground"];
-    auto mapMaterial = materials["map"];
-
     Wolf3dLoaders::Loaders loaders{dataPath};
     auto map = loaders.LoadMap(1, 1);
 
     Game::PlayerController player{glm::vec3{map.playerStart % map.width * 10.0f, 35.5f, map.playerStart / map.width * 10.0f}};
 
     glm::vec3 cubePos{map.playerStart % map.width * 10.0f + 5.0f, 5.5f, map.playerStart / map.width * 10.0f + 5.0f};
-    float cubeAngleRad = 0.0f;    
+    float cubeAngleRad = 0.0f;
 
     auto groundMesh = Game::MeshGenerator::BuildFloorPlaneMesh(device, map.width);
     auto mapMesh = Game::MeshGenerator::BuildMapMesh(device, map);
     auto cubeMesh = Game::MeshGenerator::BuildCubeMesh(device);
+
+    std::vector<Sprite> spriteModelMats;
+    for (int i = 0; i < map.tiles[1].size(); i++)
+    {
+        if (map.tiles[1][i] > 22)
+        {
+            Sprite sprite;
+            sprite.model = glm::translate(glm::mat4{1.0f}, {i % map.width * 10.0f + 5.0f, 5.0f, i / map.width * 10.0f + 5.0f});
+            sprite.data = glm::vec4(map.tiles[1][i] - 21);
+            spriteModelMats.push_back(sprite);
+        }
+    }
+
+    auto frameConstsUbo = Rendering::Buffer::CreateUniformBuffer(device, sizeof(FrameConstantsUBO));
+    auto modelStorage = Rendering::Buffer::CreateStorageBuffer(device, sizeof(Sprite) * spriteModelMats.size());
+    modelStorage->SetData((void*)spriteModelMats.data(), sizeof(Sprite) * spriteModelMats.size());
+
+    auto materials = CreateMaterials(device, renderPass, assets, frameConstsUbo, modelStorage);
+
+    auto testMaterial = materials["test"];
+    auto groundMaterial = materials["ground"];
+    auto mapMaterial = materials["map"];
+    auto spriteMaterial = materials["sprites"];
 
     vk::Fence renderFence = dev.createFence({vk::FenceCreateFlagBits::eSignaled}).value;
     vk::Semaphore presentSemaphore = dev.createSemaphore({}).value;
@@ -246,9 +307,12 @@ int main(int argc, char* argv[])
 
         player.Update(static_cast<float>(delta));
 
+        auto view = player.GetViewMatrix();
+        auto proj = glm::perspective(glm::radians(45.0f), swapchain->GetExtent().width / (float)swapchain->GetExtent().height, 0.1f, 1000.0f);
+
         auto& input = App::Input::The();
+
         auto mousepos = input.GetMousePos();
-        FrameConstants consts{(float)totalTime, (float)mousepos.x / (float)swapchain->GetExtent().width, (float)mousepos.y / (float)swapchain->GetExtent().height, 0.0f};
 
         glm::vec3 cubeDir{glm::cos(cubeAngleRad), 0.0f, glm::sin(cubeAngleRad)};
         auto prevPos = cubePos;
@@ -276,6 +340,14 @@ int main(int argc, char* argv[])
             if (map.tiles[0][i] < 108 && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
                 cubePos.z = prevPos.z;
         }
+
+        if (input.IsKeyDown(GLFW_KEY_TAB))
+            view = glm::lookAt(cubePos, cubePos + cubeDir, {0.0f, 1.0f, 0.0f});
+
+        FrameConstants consts{(float)totalTime, (float)mousepos.x / (float)swapchain->GetExtent().width, (float)mousepos.y / (float)swapchain->GetExtent().height, 0.0f};
+        FrameConstantsUBO constsUbo{view, proj, (float)totalTime, (float)mousepos.x / (float)swapchain->GetExtent().width, (float)mousepos.y / (float)swapchain->GetExtent().height, 0.0f};
+
+        frameConstsUbo->SetData((void*)&constsUbo, sizeof(FrameConstantsUBO));
 
         dev.waitForFences(1, &renderFence, VK_TRUE, UINT64_MAX);
         dev.resetFences(1, &renderFence);
@@ -309,13 +381,7 @@ int main(int argc, char* argv[])
         /*commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, testMaterial->_pipeline->pipeline);
         commandBuffer.pushConstants(testMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants), &consts);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, testMaterial->_pipeline->pipelineLayout, 0, 1, &testMaterial->_descriptorSet, 0, nullptr);
-        commandBuffer.draw(3, 1, 0, 0);*/        
-
-        auto view = player.GetViewMatrix();
-        auto proj = glm::perspective(glm::radians(45.0f), swapchain->GetExtent().width / (float)swapchain->GetExtent().height, 0.1f, 1000.0f);
-
-        if (input.IsKeyDown(GLFW_KEY_TAB))
-            view = glm::lookAt(cubePos, cubePos + cubeDir, {0.0f, 1.0f, 0.0f});
+        commandBuffer.draw(3, 1, 0, 0);*/
 
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipeline);
@@ -344,6 +410,10 @@ int main(int argc, char* argv[])
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers3, offsets);
         commandBuffer.bindIndexBuffer(cubeMesh.indexBuffer->Get(), 0, vk::IndexType::eUint32);
         commandBuffer.drawIndexed(cubeMesh.indexCount, 1, 0, 0, 0);
+
+        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipeline);
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipelineLayout, 0, 1, &spriteMaterial->_descriptorSet, 0, nullptr);
+        commandBuffer.draw(6, spriteModelMats.size(), 0, 0);
 
         commandBuffer.endRenderPass();
 

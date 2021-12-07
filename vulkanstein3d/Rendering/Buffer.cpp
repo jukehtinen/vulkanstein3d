@@ -20,7 +20,7 @@ std::shared_ptr<Buffer> Buffer::CreateStagingBuffer(std::shared_ptr<Device> devi
 {
     const vk::BufferCreateInfo bufferCreateInfo{{}, size, vk::BufferUsageFlagBits::eTransferSrc};
 
-    VmaAllocationCreateInfo allocInfo {};
+    VmaAllocationCreateInfo allocInfo{};
     allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
 
     vk::Buffer buffer{};
@@ -40,8 +40,38 @@ std::shared_ptr<Buffer> Buffer::CreateGPUBuffer(std::shared_ptr<Device> device, 
 {
     const vk::BufferCreateInfo bufferCreateInfo{{}, size, vk::BufferUsageFlagBits::eTransferDst | usage};
 
-    VmaAllocationCreateInfo allocInfo {};
+    VmaAllocationCreateInfo allocInfo{};
     allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+    vk::Buffer buffer{};
+    VmaAllocation allocation{};
+
+    vmaCreateBuffer(device->GetAllocator(), (VkBufferCreateInfo*)&bufferCreateInfo, &allocInfo, (VkBuffer*)&buffer, &allocation, nullptr);
+
+    return std::make_shared<Buffer>(device, buffer, allocation, size);
+}
+
+std::shared_ptr<Buffer> Buffer::CreateUniformBuffer(std::shared_ptr<Device> device, size_t size)
+{
+    const vk::BufferCreateInfo bufferCreateInfo{{}, size, vk::BufferUsageFlagBits::eUniformBuffer};
+
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    vk::Buffer buffer{};
+    VmaAllocation allocation{};
+
+    vmaCreateBuffer(device->GetAllocator(), (VkBufferCreateInfo*)&bufferCreateInfo, &allocInfo, (VkBuffer*)&buffer, &allocation, nullptr);
+
+    return std::make_shared<Buffer>(device, buffer, allocation, size);
+}
+
+std::shared_ptr<Buffer> Buffer::CreateStorageBuffer(std::shared_ptr<Device> device, size_t size)
+{
+    const vk::BufferCreateInfo bufferCreateInfo{{}, size, vk::BufferUsageFlagBits::eStorageBuffer};
+
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
     vk::Buffer buffer{};
     VmaAllocation allocation{};
@@ -57,6 +87,14 @@ void Buffer::CopyTo(std::shared_ptr<Buffer> targetBuffer)
         vk::BufferCopy bufferCopy{0, 0, _size};
         cmdBuffer.copyBuffer(_buffer, targetBuffer->Get(), 1, &bufferCopy);
     });
+}
+
+void Buffer::SetData(void* data, size_t size)
+{
+    void* mapping = nullptr;
+    vmaMapMemory(_device->GetAllocator(), _allocation, &mapping);
+    std::memcpy(mapping, data, size);
+    vmaUnmapMemory(_device->GetAllocator(), _allocation);
 }
 
 } // namespace Rendering

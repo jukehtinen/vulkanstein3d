@@ -280,32 +280,99 @@ Bitmap Loaders::LoadPictureTexture(Pictures picture)
     return bitmap;
 }
 
-Bitmap Loaders::LoadWallTexture(int index)
+Bitmap Loaders::LoadWallTextures()
 {
-    spdlog::info("[Wolf3dLoaders] Loading wall texture {}", index);
+    spdlog::info("[Wolf3dLoaders] Loading wall textures");
 
     std::ifstream file((_dataPath / "VSWAP.WL6"), std::ios::binary);
 
     const auto chunks = Wolf3dLoaders::LoadChunks(file);
 
+    int wallImageFirst = 0;
+    int wallImageLast = chunks.spriteStart;
+
     Bitmap bitmap;
     bitmap.width = bitmap.height = 64;
-    bitmap.data.resize(bitmap.width * bitmap.height * 4);
-    // bitmap.layers = chunks.spriteStart;
-    // bitmap.data.resize(64 * 64 * 4 * chunks.spriteStart);
+    bitmap.layers = wallImageLast;
+    bitmap.data.resize(bitmap.width * bitmap.height * 4 * wallImageLast);
 
     std::vector<uint8_t> buffer(chunks.lengths[0]);
-    //for (int i = 0; i < chunks.spriteStart; i++)
+    for (int i = wallImageFirst; i < wallImageLast; i++)
     {
-        file.seekg(chunks.offsets[index], std::ios::beg);
-        file.read(reinterpret_cast<char*>(buffer.data()), chunks.lengths[index]);
+        file.seekg(chunks.offsets[i], std::ios::beg);
+        file.read(reinterpret_cast<char*>(buffer.data()), chunks.lengths[i]);
 
         for (int y = 0; y < 64; y++)
         {
             for (int x = 0; x < 64; x++)
             {
                 const auto& color = Palette[buffer[(x * 64 + y)]];
-                std::memcpy(bitmap.data.data() + (((y * 64 + x)) * 4), &color, 4);
+                std::memcpy(bitmap.data.data() + (((y * 64 + x) + (i * 64 * 64)) * 4), &color, 4);
+            }
+        }
+    }
+
+    return bitmap;
+}
+
+Bitmap Loaders::LoadSpriteTextures()
+{
+    spdlog::info("[Wolf3dLoaders] Loading sprite textures");
+
+    std::ifstream file((_dataPath / "VSWAP.WL6"), std::ios::binary);
+
+    const auto chunks = Wolf3dLoaders::LoadChunks(file);
+
+    int spriteFirst = chunks.spriteStart;
+    int spriteLast = chunks.soundStart;
+
+    Bitmap bitmap;
+    bitmap.width = bitmap.height = 64;
+    bitmap.layers = spriteLast - spriteFirst;
+    bitmap.data.resize(64 * 64 * 4 * bitmap.layers);
+
+    std::vector<uint8_t> buffer(64 * 64);
+
+    for (int i = spriteFirst; i < spriteLast; i++)
+    {
+        std::vector<uint8_t> compressedChunk(chunks.lengths[i]);
+
+        file.seekg(chunks.offsets[i], std::ios::beg);
+        file.read(reinterpret_cast<char*>(compressedChunk.data()), chunks.lengths[i]);
+
+        auto firstColumn = static_cast<uint16_t>(compressedChunk[0]) | static_cast<uint16_t>((compressedChunk[1]) << 8);
+        auto lastColumn = static_cast<uint16_t>(compressedChunk[2]) | static_cast<uint16_t>((compressedChunk[3]) << 8);
+
+        std::vector<uint16_t> columnOffsets((lastColumn - firstColumn + 1));
+        for (int i = 0; i <= lastColumn - firstColumn; i++)
+        {
+            columnOffsets[i] = compressedChunk[4 + 2 * i] | (compressedChunk[4 + 2 * i + 1] << 8);
+        }
+
+        std::memset(buffer.data(), 0xFF, 64 * 64);
+
+        auto columnOffset = columnOffsets.data();
+        for (uint16_t column = firstColumn; column <= lastColumn; ++column)
+        {
+            auto drawingInstructions = reinterpret_cast<int16_t*>(compressedChunk.data() + *columnOffset);
+            uint32_t idx = 0;
+            while (drawingInstructions[idx] != 0)
+            {
+                for (int row = drawingInstructions[idx + 2] / 2; row < drawingInstructions[idx] / 2; ++row)
+                {
+                    buffer[column + (63 - row) * 64] = compressedChunk[drawingInstructions[idx + 1] + row];
+                }
+                idx += 3;
+            }
+            columnOffset++;
+        }
+
+        for (int y = 0; y < 64; y++)
+        {
+            for (int x = 0; x < 64; x++)
+            {
+                const auto color = buffer[(64 - 1 - y) * 64 + x] != 0xFF ? Palette[buffer[(64 - 1 - y) * 64 + x]] : Color{0, 0, 0, 0};
+                std::memcpy(bitmap.data.data() + (((y * 64 + x) + ((i - chunks.spriteStart) * 64 * 64)) * 4), &color, 4);
             }
         }
     }

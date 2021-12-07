@@ -32,17 +32,33 @@ Assets::Assets(std::shared_ptr<Rendering::Device> device, const std::filesystem:
         _textures.push_back(texture);
     }
 
-    size_t textureSize = (scale * 64) * (scale * 64) * 4;
-    std::vector<uint8_t> wallTextureArray(textureSize * 100);
-    for (int i = 0; i < 100; i++)
-    {
-        auto wallBitmap = loaders.LoadWallTexture(i);
+    const size_t textureSize = 64 * 64 * 4;
+    const size_t scaledTextureSize = (scale * 64) * (scale * 64) * 4;
 
-        uint32_t* ptr = reinterpret_cast<uint32_t*>(wallTextureArray.data() + (i * textureSize));
-        xbrz::scale(scale, (uint32_t*)wallBitmap.data.data(), ptr, wallBitmap.width, wallBitmap.height, xbrz::ColorFormat::ARGB);
+    auto wallBitmap = loaders.LoadWallTextures();
+    std::vector<uint8_t> scaledWallTextureArray(scaledTextureSize * wallBitmap.layers);
+    for (int i = 0; i < wallBitmap.layers; i++)
+    {
+        uint32_t* srcptr = reinterpret_cast<uint32_t*>(wallBitmap.data.data() + (i * textureSize));
+        uint32_t* dstptr = reinterpret_cast<uint32_t*>(scaledWallTextureArray.data() + (i * scaledTextureSize));
+
+        xbrz::scale(scale, srcptr, dstptr, wallBitmap.width, wallBitmap.height, xbrz::ColorFormat::ARGB);
     }
 
-    auto texture = Rendering::Texture::CreateTexture(device, wallTextureArray.data(), scale * 64, scale * 64, 100);
+    auto texture = Rendering::Texture::CreateTexture(device, scaledWallTextureArray.data(), scale * 64, scale * 64, wallBitmap.layers);
+    _textures.push_back(texture);
+
+    auto spriteBitmap = loaders.LoadSpriteTextures();
+    std::vector<uint8_t> scaledSpriteTextureArray(scaledTextureSize * spriteBitmap.layers);
+    for (int i = 0; i < spriteBitmap.layers; i++)
+    {
+        uint32_t* srcptr = reinterpret_cast<uint32_t*>(spriteBitmap.data.data() + (i * textureSize));
+        uint32_t* dstptr = reinterpret_cast<uint32_t*>(scaledSpriteTextureArray.data() + (i * scaledTextureSize));
+
+        xbrz::scale(scale, srcptr, dstptr, spriteBitmap.width, spriteBitmap.height, xbrz::ColorFormat::ARGB);
+    }
+
+    texture = Rendering::Texture::CreateTexture(device, scaledSpriteTextureArray.data(), scale * 64, scale * 64, spriteBitmap.layers);
     _textures.push_back(texture);
 }
 
