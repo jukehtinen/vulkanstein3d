@@ -3,6 +3,8 @@
 #include "App/Input.h"
 #include "App/Window.h"
 #include "Game/Assets.h"
+#include "Game/Components.h"
+#include "Game/Level.h"
 #include "Game/MeshGenerator.h"
 #include "Game/PlayerController.h"
 #include "Rendering/Buffer.h"
@@ -232,11 +234,19 @@ int main(int argc, char* argv[])
     Game::Assets assets{device, dataPath};
 
     Wolf3dLoaders::Loaders loaders{dataPath};
-    auto map = loaders.LoadMap(1, 1);
 
-    Game::PlayerController player{glm::vec3{map.playerStart % map.width * 10.0f, 35.5f, map.playerStart / map.width * 10.0f}};
+    Game::Level level{loaders.LoadMap(1, 1)};
 
-    glm::vec3 cubePos{map.playerStart % map.width * 10.0f + 5.0f, 5.5f, map.playerStart / map.width * 10.0f + 5.0f};
+    auto& map = *level.GetMap();
+
+    auto& registry = level.GetRegistry();
+
+    auto& playerTrans = registry.get<Game::Transform>(level.GetPlayerEntity());
+
+    Game::PlayerController player{playerTrans.position};
+
+    glm::vec3 cubePos{playerTrans.position};
+    cubePos.y = 5.5f;
     float cubeAngleRad = 0.0f;
 
     auto groundMesh = Game::MeshGenerator::BuildFloorPlaneMesh(device, map.width);
@@ -244,15 +254,13 @@ int main(int argc, char* argv[])
     auto cubeMesh = Game::MeshGenerator::BuildCubeMesh(device);
 
     std::vector<Sprite> spriteModelMats;
-    for (int i = 0; i < map.tiles[1].size(); i++)
+    auto itemview = registry.view<Game::Transform, Game::Sprite>();
+    for (auto [entity, itemtransform, csprite] : itemview.each())
     {
-        if (map.tiles[1][i] > 22)
-        {
-            Sprite sprite;
-            sprite.model = glm::translate(glm::mat4{1.0f}, {i % map.width * 10.0f + 5.0f, 5.0f, i / map.width * 10.0f + 5.0f});
-            sprite.data = glm::vec4(map.tiles[1][i] - 21);
-            spriteModelMats.push_back(sprite);
-        }
+        Sprite sprite;
+        sprite.model = glm::translate(glm::mat4{1.0f}, itemtransform.position);
+        sprite.data = glm::vec4(csprite.spriteIndex);
+        spriteModelMats.push_back(sprite);
     }
 
     auto frameConstsUbo = Rendering::Buffer::CreateUniformBuffer(device, sizeof(FrameConstantsUBO));
@@ -326,21 +334,23 @@ int main(int argc, char* argv[])
         if (input.IsKeyDown(GLFW_KEY_RIGHT))
             cubeAngleRad += (float)delta * 5.0f;
 
+        const auto& tiles = level.GetTiles();
         cubePos.x = newPos.x;
-        for (int i = 0; i < map.tiles[0].size(); i++)
+        // todo: just check few tiles around player.
+        for (int i = 0; i < 64 * 64; i++)
         {
             glm::vec4 rect{i % map.width * 10.0f + 5.0f, i / map.width * 10.0f + 5.0f, 10.0f, 10.0f};
-            if (map.tiles[0][i] < 108 && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
+            if ((tiles[i] & Game::TileBlocksMovement) && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
                 cubePos.x = prevPos.x;
         }
         cubePos.z = newPos.z;
-        for (int i = 0; i < map.tiles[0].size(); i++)
+        for (int i = 0; i < 64 * 64; i++)
         {
             glm::vec4 rect{i % map.width * 10.0f + 5.0f, i / map.width * 10.0f + 5.0f, 10.0f, 10.0f};
-            if (map.tiles[0][i] < 108 && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
+            if ((tiles[i] & Game::TileBlocksMovement) && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
                 cubePos.z = prevPos.z;
         }
-
+        
         if (input.IsKeyDown(GLFW_KEY_TAB))
             view = glm::lookAt(cubePos, cubePos + cubeDir, {0.0f, 1.0f, 0.0f});
 

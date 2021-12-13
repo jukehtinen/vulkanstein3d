@@ -380,7 +380,7 @@ Bitmap Loaders::LoadSpriteTextures()
     return bitmap;
 }
 
-Map Loaders::LoadMap(int episode, int level)
+std::shared_ptr<Map> Loaders::LoadMap(int episode, int level)
 {
     spdlog::info("[Wolf3dLoaders] Loading episode {} level {}", episode, level);
 
@@ -409,8 +409,8 @@ Map Loaders::LoadMap(int episode, int level)
 
     const auto mapSize = levelHeader.width * levelHeader.width * 2;
 
-    Map map;
-    map.width = levelHeader.width;
+    auto map = std::make_shared<Map>();
+    map->width = levelHeader.width;
     for (auto plane = 0; plane < 2; plane++)
     {
         std::vector<uint8_t> carmackBuffer(levelHeader.planeCompressedLength[plane]);
@@ -424,26 +424,19 @@ Map Loaders::LoadMap(int episode, int level)
         std::vector<uint8_t> expandBuffer(expandedSize);
         CarmackExpand(reinterpret_cast<uint8_t*>(source), reinterpret_cast<uint16_t*>(expandBuffer.data()), expandedSize);
 
-        map.tiles[plane].resize(mapSize);
-        RLEWexpand((reinterpret_cast<uint16_t*>(expandBuffer.data())) + 1, reinterpret_cast<uint16_t*>(map.tiles[plane].data()), mapSize, mapHeader.rlewMagic);
+        map->tiles[plane].resize(mapSize);
+        RLEWexpand((reinterpret_cast<uint16_t*>(expandBuffer.data())) + 1, reinterpret_cast<uint16_t*>(map->tiles[plane].data()), mapSize, mapHeader.rlewMagic);
     }
 
     // Wolf has two images per tile (light and dark). Use only light version.
-    for (int i = 0; i < map.tiles[0].size(); i++)
+    for (int i = 0; i < map->tiles[0].size(); i++)
     {
-        auto tileindex = map.tiles[0][i];
+        auto tileindex = map->tiles[0][i];
         tileindex--;
         tileindex *= 2;
         if (tileindex % 2 != 0)
             tileindex++;
-        map.tiles[0][i] = tileindex;
-    }
-
-    for (int i = 0; i < map.tiles[1].size(); i++)
-    {
-        auto tileindex = map.tiles[1][i];
-        if (tileindex == 19 || tileindex == 20 || tileindex == 21 || tileindex == 22)
-            map.playerStart = i;
+        map->tiles[0][i] = tileindex;
     }
 
     return map;

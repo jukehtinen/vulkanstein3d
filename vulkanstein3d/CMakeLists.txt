@@ -2,6 +2,7 @@
 
 add_subdirectory ("Shaders")
 
+find_package(EnTT CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
@@ -13,6 +14,7 @@ add_executable (vulkanstein3d
     "App/Input.cpp"
     "App/Window.cpp"
     "Game/Assets.cpp"
+    "Game/Level.cpp"
     "Game/MeshGenerator.cpp"
     "Game/PlayerController.cpp"
     "Rendering/Buffer.cpp"
@@ -30,7 +32,8 @@ target_include_directories(vulkanstein3d PRIVATE
     ${Vulkan_INCLUDE_DIR}
 )
 
-target_link_libraries(vulkanstein3d PRIVATE    
+target_link_libraries(vulkanstein3d PRIVATE
+    EnTT::EnTT
     glfw
     glm::glm    	
     spdlog::spdlog 
