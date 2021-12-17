@@ -407,7 +407,7 @@ std::shared_ptr<Map> Loaders::LoadMap(int episode, int level)
     mapFile.seekg(mapHeader.levelPointers[levelIndex], std::ios::beg);
     mapFile.read(reinterpret_cast<char*>(&levelHeader), sizeof(LevelHeader));
 
-    const auto mapSize = levelHeader.width * levelHeader.width * 2;
+    const auto mapSize = levelHeader.width * levelHeader.width;
 
     auto map = std::make_shared<Map>();
     map->width = levelHeader.width;
@@ -425,18 +425,7 @@ std::shared_ptr<Map> Loaders::LoadMap(int episode, int level)
         CarmackExpand(reinterpret_cast<uint8_t*>(source), reinterpret_cast<uint16_t*>(expandBuffer.data()), expandedSize);
 
         map->tiles[plane].resize(mapSize);
-        RLEWexpand((reinterpret_cast<uint16_t*>(expandBuffer.data())) + 1, reinterpret_cast<uint16_t*>(map->tiles[plane].data()), mapSize, mapHeader.rlewMagic);
-    }
-
-    // Wolf has two images per tile (light and dark). Use only light version.
-    for (int i = 0; i < map->tiles[0].size(); i++)
-    {
-        auto tileindex = map->tiles[0][i];
-        tileindex--;
-        tileindex *= 2;
-        if (tileindex % 2 != 0)
-            tileindex++;
-        map->tiles[0][i] = tileindex;
+        RLEWexpand((reinterpret_cast<uint16_t*>(expandBuffer.data())) + 1, reinterpret_cast<uint16_t*>(map->tiles[plane].data()), mapSize * 2, mapHeader.rlewMagic);
     }
 
     return map;

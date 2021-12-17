@@ -1,6 +1,7 @@
 #include "../Common.h"
 
 #include "Components.h"
+#include "Intersection.h"
 #include "Level.h"
 
 #include "../Wolf3dLoaders/Loaders.h"
@@ -15,10 +16,30 @@ Level::Level(std::shared_ptr<Wolf3dLoaders::Map> map)
     _tileMap.resize(map->width * map->width);
     for (int i = 0; i < map->tiles[0].size(); i++)
     {
-        if (map->tiles[0][i] > 107)
+        if (map->tiles[0][i] > 53)
+            continue;
+
+        // Secret doors
+        if (map->tiles[1][i] == 98)
             continue;
 
         _tileMap[i] = TileBlocksMovement | TileBlocksShooting;
+    }
+
+    for (int i = 0; i < map->tiles[0].size(); i++)
+    {
+        if (map->tiles[0][i] == 90)
+            CreateDoorEntity(i, DoorVertical);
+        if (map->tiles[0][i] == 91)
+            CreateDoorEntity(i, 0);
+        if (map->tiles[0][i] == 92)
+            CreateDoorEntity(i, DoorVertical | DoorGoldKey);
+        if (map->tiles[0][i] == 93)
+            CreateDoorEntity(i, DoorGoldKey);
+        if (map->tiles[0][i] == 94)
+            CreateDoorEntity(i, DoorVertical | DoorSilverKey);
+        if (map->tiles[0][i] == 95)
+            CreateDoorEntity(i, DoorSilverKey);
     }
 
     for (int i = 0; i < map->tiles[1].size(); i++)
@@ -55,7 +76,7 @@ Level::Level(std::shared_ptr<Wolf3dLoaders::Map> map)
             continue;
         }
 
-        CreateSceneryEntity(i);
+        CreateSceneryEntity(i, objectId);
     }
 }
 
@@ -79,12 +100,11 @@ void Level::CreateItemEntity(int index)
     _registry.emplace<Item>(entity, _map->tiles[1][index]);
     _registry.emplace<Sprite>(entity, _map->tiles[1][index] - 21);
     _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f));
-    _registry.emplace<Trigger>(entity, 3.5f);
+    _registry.emplace<Trigger>(entity, 5.0f);
 }
 
-void Level::CreateSceneryEntity(int index)
+void Level::CreateSceneryEntity(int index, int objectId)
 {
-    int objectId = _map->tiles[1][index];
     const auto entity = _registry.create();
     _registry.emplace<Sprite>(entity, objectId - 21);
     _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f));
@@ -99,6 +119,84 @@ void Level::CreateSceneryEntity(int index)
         flags |= Game::TileBlocksMovement;
 
     _tileMap[index] = flags;
+}
+
+void Level::CreateDoorEntity(int index, uint32_t flags)
+{
+    const auto entity = _registry.create();
+
+    auto scale = (flags & Game::DoorVertical) ? glm::vec3{2.5f, 10.0f, 10.0f} : glm::vec3{10.0f, 10.0f, 2.5f};
+
+    _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f), scale);
+    _registry.emplace<Door>(entity, flags);
+    _registry.emplace<Renderable>(entity, 0);
+}
+
+void Level::Update(double delta)
+{
+    auto& playerTrans = _registry.get<Game::Transform>(_player);
+    auto& playerComponent = _registry.get<Game::Player>(_player);
+
+    std::vector<entt::entity> remove;
+
+    // Pick up items
+    auto view = _registry.view<Game::Item, Game::Trigger, Game::Transform>();
+    for (auto [entity, item, trigger, transform] : view.each())
+    {
+        if (Game::Intersection::CircleCircleIntersect({transform.position.x, transform.position.z}, trigger.radius, {playerTrans.position.x, playerTrans.position.z}, 5.0f))
+        {
+            switch ((Wolf3dLoaders::MapObjects)item.type)
+            {
+            case Wolf3dLoaders::MapObjects::GoldKey:
+                playerComponent.hasGoldKey = true;
+                break;
+            case Wolf3dLoaders::MapObjects::SilverKey:
+                playerComponent.hasSilverKey = true;
+                break;
+            case Wolf3dLoaders::MapObjects::Food:
+                playerComponent.health += 10;
+                break;
+            case Wolf3dLoaders::MapObjects::FirstAidKit:
+                playerComponent.health += 25;
+                break;
+            case Wolf3dLoaders::MapObjects::Ammo:
+                playerComponent.ammo += 8;
+                break;
+            case Wolf3dLoaders::MapObjects::MachineGun:
+                playerComponent.hasMachineGun = true;
+                break;
+            case Wolf3dLoaders::MapObjects::Gatling:
+                playerComponent.hasGatling = true;
+                break;
+            case Wolf3dLoaders::MapObjects::Cross:
+                playerComponent.score += 100;
+                break;
+            case Wolf3dLoaders::MapObjects::Chalice:
+                playerComponent.score += 500;
+                break;
+            case Wolf3dLoaders::MapObjects::Jewels:
+                playerComponent.score += 1000;
+                break;
+            case Wolf3dLoaders::MapObjects::Crown:
+                playerComponent.score += 5000;
+                break;
+            case Wolf3dLoaders::MapObjects::ExtraLife:
+                playerComponent.health += 100;
+                playerComponent.ammo += 25;
+                break;
+            }
+
+            if (playerComponent.ammo > 99)
+                playerComponent.ammo = 99;
+            if (playerComponent.health > 100)
+                playerComponent.health = 100;
+
+            spdlog::info("Picked up {}. Ammo:{} Health:{} Score:{}", item.type, playerComponent.ammo, playerComponent.health, playerComponent.score);
+            remove.push_back(entity);
+        }
+    }
+
+    _registry.destroy(remove.begin(), remove.end());
 }
 
 } // namespace Game

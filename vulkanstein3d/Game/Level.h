@@ -25,10 +25,13 @@ class Level
     entt::registry& GetRegistry() { return _registry; }
     entt::entity GetPlayerEntity() { return _player; }
 
+    void Update(double delta);
+
   private:
     void CreatePlayerEntity(int index);
     void CreateItemEntity(int index);
-    void CreateSceneryEntity(int index);
+    void CreateSceneryEntity(int index, int objectId);
+    void CreateDoorEntity(int index, uint32_t flags);
 
     glm::vec3 IndexToPosition(int index, float height = 0.0f);
 

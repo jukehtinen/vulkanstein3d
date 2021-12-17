@@ -116,7 +116,7 @@ Game::Mesh MeshGenerator::BuildCubeMesh(std::shared_ptr<Rendering::Device> devic
 
 Game::Mesh MeshGenerator::BuildMapMesh(std::shared_ptr<Rendering::Device> device, const Wolf3dLoaders::Map& map)
 {
-    const auto solidWallCount = std::count_if(std::begin(map.tiles[0]), std::end(map.tiles[0]), [](uint16_t i) { return i < 108; });
+    const auto solidWallCount = std::count_if(std::begin(map.tiles[0]), std::end(map.tiles[0]), [](uint16_t i) { return i != 0 && i <= 53; });
 
     std::vector<Vertex> verts(solidWallCount * 6 * 4);
     std::vector<uint32_t> indices(solidWallCount * 36);
@@ -125,10 +125,22 @@ Game::Mesh MeshGenerator::BuildMapMesh(std::shared_ptr<Rendering::Device> device
 
     for (int i = 0; i < map.width * map.width; i++)
     {
-        if (map.tiles[0][i] > 107)
+        int tileId = map.tiles[0][i];
+
+        if (tileId == 0 || tileId > 53)
             continue;
 
-        GenerateCube(verts.data() + (cubeIndex * 24), indices.data() + (cubeIndex * 36), map.tiles[0][i]);
+        // Handle secret doors as entities.
+        if (map.tiles[1][i] == 98)
+            continue;
+
+        // Wolf has two images per tile (light and dark). Use only light version.
+        tileId--;
+        tileId *= 2;
+        if (tileId % 2 != 0)
+            tileId++;
+
+        GenerateCube(verts.data() + (cubeIndex * 24), indices.data() + (cubeIndex * 36), tileId);
 
         for (auto n = 0; n < 36; n++)
         {

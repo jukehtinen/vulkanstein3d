@@ -4,6 +4,7 @@
 #include "App/Window.h"
 #include "Game/Assets.h"
 #include "Game/Components.h"
+#include "Game/Intersection.h"
 #include "Game/Level.h"
 #include "Game/MeshGenerator.h"
 #include "Game/PlayerController.h"
@@ -57,40 +58,38 @@ std::vector<vk::Framebuffer> CreateFramebuffers(std::shared_ptr<Rendering::Devic
     return frameBuffers;
 }
 
-std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass renderPass, Game::Assets& assets,
-                                                                            std::shared_ptr<Rendering::Buffer> frameUbo, std::shared_ptr<Rendering::Buffer> storage)
+void CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass renderPass, Game::Assets& assets,
+                     std::shared_ptr<Rendering::Buffer> frameUbo, std::shared_ptr<Rendering::Buffer> storage)
 {
     // Hackyti-hax. Create layouts from reflected json files.
 
-    std::map<std::string, std::shared_ptr<Rendering::Material>> materials;
+    //{
+    //    std::vector bindings{vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr}};
 
-    {
-        std::vector bindings{vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr}};
+    //    std::vector<vk::DescriptorBindingFlags> descriptorBindingFlags = {vk::DescriptorBindingFlagBits::eVariableDescriptorCount};
+    //    const vk::DescriptorSetLayoutBindingFlagsCreateInfo descriptorSetLayoutBindingFlagsCreateInfo{descriptorBindingFlags};
 
-        std::vector<vk::DescriptorBindingFlags> descriptorBindingFlags = {vk::DescriptorBindingFlagBits::eVariableDescriptorCount};
-        const vk::DescriptorSetLayoutBindingFlagsCreateInfo descriptorSetLayoutBindingFlagsCreateInfo{descriptorBindingFlags};
+    //    vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{{}, bindings};
+    //    descriptorSetLayoutCreateInfo.pNext = &descriptorSetLayoutBindingFlagsCreateInfo;
 
-        vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{{}, bindings};
-        descriptorSetLayoutCreateInfo.pNext = &descriptorSetLayoutBindingFlagsCreateInfo;
+    //    auto descriptorSetLayout = device->Get().createDescriptorSetLayout(descriptorSetLayoutCreateInfo).value;
 
-        auto descriptorSetLayout = device->Get().createDescriptorSetLayout(descriptorSetLayoutCreateInfo).value;
+    //    std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{descriptorSetLayout};
+    //    std::vector<vk::PushConstantRange> pushConstantRanges{{vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants)}};
 
-        std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{descriptorSetLayout};
-        std::vector<vk::PushConstantRange> pushConstantRanges{{vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants)}};
+    //    auto pipelineLayout = device->Get().createPipelineLayout({{}, descriptorSetLayouts, pushConstantRanges}).value;
 
-        auto pipelineLayout = device->Get().createPipelineLayout({{}, descriptorSetLayouts, pushConstantRanges}).value;
+    //    auto testPipeline = Rendering::PipelineBuilder::Builder()
+    //                            .SetRenderpass(renderPass)
+    //                            .SetLayouts(pipelineLayout, descriptorSetLayout)
+    //                            .SetShaders("Shaders/test.vert.spv", "Shaders/test.frag.spv")
+    //                            .Build(device);
 
-        auto testPipeline = Rendering::PipelineBuilder::Builder()
-                                .SetRenderpass(renderPass)
-                                .SetLayouts(pipelineLayout, descriptorSetLayout)
-                                .SetShaders("Shaders/test.vert.spv", "Shaders/test.frag.spv")
-                                .Build(device);
-
-        materials["test"] = Rendering::MaterialBuilder::Builder()
-                                .SetPipeline(testPipeline)
-                                .SetTexture(assets._textures[0])
-                                .Build(device);
-    }
+    //    materials["test"] = Rendering::MaterialBuilder::Builder()
+    //                            .SetPipeline(testPipeline)
+    //                            .SetTexture(assets.GetTexture("tex_walls"))
+    //                            .Build(device);
+    //}
 
     {
         std::vector bindings{vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr}};
@@ -118,10 +117,10 @@ std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std:
                                 .SetShaders("Shaders/mat_map.vert.spv", "Shaders/mat_map.frag.spv")
                                 .Build(device);
 
-        materials["map"] = Rendering::MaterialBuilder::Builder()
-                               .SetPipeline(testPipeline)
-                               .SetTexture(assets._textures[1])
-                               .Build(device);
+        assets.AddMaterial("mat_map", Rendering::MaterialBuilder::Builder()
+                                          .SetPipeline(testPipeline)
+                                          .SetTexture(assets.GetTexture("tex_walls"))
+                                          .Build(device));
     }
 
     {
@@ -144,11 +143,11 @@ std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std:
                                 .SetBlend(true)
                                 .Build(device);
 
-        materials["sprites"] = Rendering::MaterialBuilder::Builder()
-                                   .SetPipeline(testPipeline)
-                                   .SetTexture(assets._textures[2])
-                                   .SetUboHack(frameUbo, storage)
-                                   .Build(device);
+        assets.AddMaterial("mat_sprites", Rendering::MaterialBuilder::Builder()
+                                              .SetPipeline(testPipeline)
+                                              .SetTexture(assets.GetTexture("tex_sprites"))
+                                              .SetUboHack(frameUbo, storage)
+                                              .Build(device));
     }
 
     {
@@ -170,32 +169,10 @@ std::map<std::string, std::shared_ptr<Rendering::Material>> CreateMaterials(std:
                                  .SetVertexInput(vertexBinding, vertexAttributes)
                                  .Build(device);
 
-        materials["ground"] = Rendering::MaterialBuilder::Builder()
-                                  .SetPipeline(testPipeline2)
-                                  .Build(device);
+        assets.AddMaterial("mat_ground", Rendering::MaterialBuilder::Builder()
+                                             .SetPipeline(testPipeline2)
+                                             .Build(device));
     }
-    return materials;
-}
-
-bool CircleRectIntersect(const glm::vec2& circle, float r, const glm::vec4& rect)
-{
-    auto circleDistancex = glm::abs(circle.x - rect.x);
-    auto circleDistancey = glm::abs(circle.y - rect.y);
-
-    if (circleDistancex > (rect.z / 2 + r))
-        return false;
-    if (circleDistancey > (rect.w / 2 + r))
-        return false;
-
-    if (circleDistancex <= (rect.z / 2))
-        return true;
-
-    if (circleDistancey <= (rect.w / 2))
-        return true;
-
-    auto cornerDistance_sq = glm::pow((circleDistancex - rect.z / 2), 2.0f) + glm::pow((circleDistancey - rect.w / 2), 2.0f);
-
-    return (cornerDistance_sq <= glm::pow(r, 2.0f));
 }
 
 int main(int argc, char* argv[])
@@ -241,12 +218,11 @@ int main(int argc, char* argv[])
 
     auto& registry = level.GetRegistry();
 
-    auto& playerTrans = registry.get<Game::Transform>(level.GetPlayerEntity());
+    auto& playert = registry.get<Game::Transform>(level.GetPlayerEntity());
 
-    Game::PlayerController player{playerTrans.position};
+    Game::PlayerController player{playert.position};
 
-    glm::vec3 cubePos{playerTrans.position};
-    cubePos.y = 5.5f;
+    playert.position.y = 5.5f;
     float cubeAngleRad = 0.0f;
 
     auto groundMesh = Game::MeshGenerator::BuildFloorPlaneMesh(device, map.width);
@@ -254,25 +230,15 @@ int main(int argc, char* argv[])
     auto cubeMesh = Game::MeshGenerator::BuildCubeMesh(device);
 
     std::vector<Sprite> spriteModelMats;
-    auto itemview = registry.view<Game::Transform, Game::Sprite>();
-    for (auto [entity, itemtransform, csprite] : itemview.each())
-    {
-        Sprite sprite;
-        sprite.model = glm::translate(glm::mat4{1.0f}, itemtransform.position);
-        sprite.data = glm::vec4(csprite.spriteIndex);
-        spriteModelMats.push_back(sprite);
-    }
 
     auto frameConstsUbo = Rendering::Buffer::CreateUniformBuffer(device, sizeof(FrameConstantsUBO));
-    auto modelStorage = Rendering::Buffer::CreateStorageBuffer(device, sizeof(Sprite) * spriteModelMats.size());
-    modelStorage->SetData((void*)spriteModelMats.data(), sizeof(Sprite) * spriteModelMats.size());
+    auto modelStorage = Rendering::Buffer::CreateStorageBuffer(device, sizeof(Sprite) * 256);
 
-    auto materials = CreateMaterials(device, renderPass, assets, frameConstsUbo, modelStorage);
-
-    auto testMaterial = materials["test"];
-    auto groundMaterial = materials["ground"];
-    auto mapMaterial = materials["map"];
-    auto spriteMaterial = materials["sprites"];
+    CreateMaterials(device, renderPass, assets, frameConstsUbo, modelStorage);
+    
+    auto groundMaterial = assets.GetMaterial("mat_ground");
+    auto mapMaterial = assets.GetMaterial("mat_map");
+    auto spriteMaterial = assets.GetMaterial("mat_sprites");
 
     vk::Fence renderFence = dev.createFence({vk::FenceCreateFlagBits::eSignaled}).value;
     vk::Semaphore presentSemaphore = dev.createSemaphore({}).value;
@@ -314,6 +280,18 @@ int main(int argc, char* argv[])
         totalTime += delta;
 
         player.Update(static_cast<float>(delta));
+        level.Update(delta);
+
+        spriteModelMats.clear();
+        auto itemview = registry.view<Game::Transform, Game::Sprite>();
+        for (auto [entity, itemtransform, csprite] : itemview.each())
+        {
+            Sprite sprite;
+            sprite.model = glm::translate(glm::mat4{1.0f}, itemtransform.position);
+            sprite.data = glm::vec4(csprite.spriteIndex);
+            spriteModelMats.push_back(sprite);
+        }
+        modelStorage->SetData((void*)spriteModelMats.data(), sizeof(Sprite) * spriteModelMats.size());
 
         auto view = player.GetViewMatrix();
         auto proj = glm::perspective(glm::radians(45.0f), swapchain->GetExtent().width / (float)swapchain->GetExtent().height, 0.1f, 1000.0f);
@@ -322,37 +300,47 @@ int main(int argc, char* argv[])
 
         auto mousepos = input.GetMousePos();
 
+        auto& playerTrans = registry.get<Game::Transform>(level.GetPlayerEntity());
+
         glm::vec3 cubeDir{glm::cos(cubeAngleRad), 0.0f, glm::sin(cubeAngleRad)};
-        auto prevPos = cubePos;
-        glm::vec3 newPos = cubePos;
+        auto prevPos = playerTrans.position;
+        glm::vec3 newPos = playerTrans.position;
         if (input.IsKeyDown(GLFW_KEY_UP))
-            newPos = cubePos + cubeDir * (float)delta * 50.0f;
+            newPos = playerTrans.position + cubeDir * (float)delta * 50.0f;
         if (input.IsKeyDown(GLFW_KEY_DOWN))
-            newPos = cubePos - cubeDir * (float)delta * 50.0f;
+            newPos = playerTrans.position - cubeDir * (float)delta * 50.0f;
         if (input.IsKeyDown(GLFW_KEY_LEFT))
             cubeAngleRad -= (float)delta * 5.0f;
         if (input.IsKeyDown(GLFW_KEY_RIGHT))
             cubeAngleRad += (float)delta * 5.0f;
 
+        int tilex = (int)(newPos.x / 10.0f);
+        int tiley = (int)(newPos.z / 10.0f);
+
         const auto& tiles = level.GetTiles();
-        cubePos.x = newPos.x;
-        // todo: just check few tiles around player.
-        for (int i = 0; i < 64 * 64; i++)
+        playerTrans.position.x = newPos.x;
+        for (int y = tiley - 1; y < tiley + 2; y++)
         {
-            glm::vec4 rect{i % map.width * 10.0f + 5.0f, i / map.width * 10.0f + 5.0f, 10.0f, 10.0f};
-            if ((tiles[i] & Game::TileBlocksMovement) && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
-                cubePos.x = prevPos.x;
+            for (int x = tilex - 1; x < tilex + 2; x++)
+            {
+                glm::vec4 rect{x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f};
+                if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({playerTrans.position.x, playerTrans.position.z}, 3.0f, rect))
+                    playerTrans.position.x = prevPos.x;
+            }
         }
-        cubePos.z = newPos.z;
-        for (int i = 0; i < 64 * 64; i++)
+        playerTrans.position.z = newPos.z;
+        for (int y = tiley - 1; y < tiley + 2; y++)
         {
-            glm::vec4 rect{i % map.width * 10.0f + 5.0f, i / map.width * 10.0f + 5.0f, 10.0f, 10.0f};
-            if ((tiles[i] & Game::TileBlocksMovement) && CircleRectIntersect({cubePos.x, cubePos.z}, 3.0f, rect))
-                cubePos.z = prevPos.z;
+            for (int x = tilex - 1; x < tilex + 2; x++)
+            {
+                glm::vec4 rect{x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f};
+                if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({playerTrans.position.x, playerTrans.position.z}, 3.0f, rect))
+                    playerTrans.position.z = prevPos.z;
+            }
         }
-        
+
         if (input.IsKeyDown(GLFW_KEY_TAB))
-            view = glm::lookAt(cubePos, cubePos + cubeDir, {0.0f, 1.0f, 0.0f});
+            view = glm::lookAt(playerTrans.position, playerTrans.position + cubeDir, {0.0f, 1.0f, 0.0f});
 
         FrameConstants consts{(float)totalTime, (float)mousepos.x / (float)swapchain->GetExtent().width, (float)mousepos.y / (float)swapchain->GetExtent().height, 0.0f};
         FrameConstantsUBO constsUbo{view, proj, (float)totalTime, (float)mousepos.x / (float)swapchain->GetExtent().width, (float)mousepos.y / (float)swapchain->GetExtent().height, 0.0f};
@@ -412,7 +400,7 @@ int main(int argc, char* argv[])
         commandBuffer.bindIndexBuffer(mapMesh.indexBuffer->Get(), 0, vk::IndexType::eUint32);
         commandBuffer.drawIndexed(mapMesh.indexCount, 1, 0, 0, 0);
 
-        consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, cubePos) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
+        consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, playerTrans.position) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
         commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants), &consts);
@@ -420,6 +408,14 @@ int main(int argc, char* argv[])
         commandBuffer.bindVertexBuffers(0, 1, vertexBuffers3, offsets);
         commandBuffer.bindIndexBuffer(cubeMesh.indexBuffer->Get(), 0, vk::IndexType::eUint32);
         commandBuffer.drawIndexed(cubeMesh.indexCount, 1, 0, 0, 0);
+
+        auto rendeables = registry.view<Game::Transform, Game::Renderable>();
+        for (auto [entity, rtransform, rmesh] : rendeables.each())
+        {
+            consts.mvp = proj * view * glm::translate(glm::mat4{ 1.0f }, rtransform.position) * glm::scale(glm::mat4{ 1.0f }, rtransform.scale);
+            commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eAllGraphics, 0, sizeof(FrameConstants), &consts);
+            commandBuffer.drawIndexed(cubeMesh.indexCount, 1, 0, 0, 0);
+        }
 
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipeline);
         commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipelineLayout, 0, 1, &spriteMaterial->_descriptorSet, 0, nullptr);
