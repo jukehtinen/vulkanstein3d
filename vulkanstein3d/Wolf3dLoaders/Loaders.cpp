@@ -204,9 +204,9 @@ Loaders::Loaders(const std::filesystem::path& dataPath)
 {
 }
 
-Bitmap Loaders::LoadPictureTexture(Pictures picture)
+Bitmap Loaders::LoadPictureTexture(int pictureIndex)
 {
-    spdlog::info("[Wolf3dLoaders] Loading picture {}", picture);
+    spdlog::info("[Wolf3dLoaders] Loading picture {}", pictureIndex);
 
     std::ifstream dictFile((_dataPath / "VGADICT.WL6"), std::ios::binary);
 
@@ -245,7 +245,7 @@ Bitmap Loaders::LoadPictureTexture(Pictures picture)
         picTable[i].height = expanded[4 * i + 2] | (expanded[4 * i + 3] << 8);
     }
 
-    uint32_t picId = (uint32_t)picture;
+    uint32_t picId = (uint32_t)pictureIndex;
     uint32_t index = picId + 1;
     while (offsets[index] == -1)
         ++index;

@@ -28,10 +28,13 @@ std::shared_ptr<Buffer> Buffer::CreateStagingBuffer(std::shared_ptr<Device> devi
 
     vmaCreateBuffer(device->GetAllocator(), (VkBufferCreateInfo*)&bufferCreateInfo, &allocInfo, (VkBuffer*)&buffer, &allocation, nullptr);
 
-    void* mapping = nullptr;
-    vmaMapMemory(device->GetAllocator(), allocation, &mapping);
-    std::memcpy(mapping, data, size);
-    vmaUnmapMemory(device->GetAllocator(), allocation);
+    if (data != nullptr)
+    {
+        void* mapping = nullptr;
+        vmaMapMemory(device->GetAllocator(), allocation, &mapping);
+        std::memcpy(mapping, data, size);
+        vmaUnmapMemory(device->GetAllocator(), allocation);
+    }
 
     return std::make_shared<Buffer>(device, buffer, allocation, size);
 }
@@ -79,6 +82,18 @@ std::shared_ptr<Buffer> Buffer::CreateStorageBuffer(std::shared_ptr<Device> devi
     vmaCreateBuffer(device->GetAllocator(), (VkBufferCreateInfo*)&bufferCreateInfo, &allocInfo, (VkBuffer*)&buffer, &allocation, nullptr);
 
     return std::make_shared<Buffer>(device, buffer, allocation, size);
+}
+
+void* Buffer::Map()
+{
+    void* mapping = nullptr;
+    vmaMapMemory(_device->GetAllocator(), _allocation, &mapping);
+    return mapping;
+}
+
+void Buffer::UnMap()
+{
+    vmaUnmapMemory(_device->GetAllocator(), _allocation);
 }
 
 void Buffer::CopyTo(std::shared_ptr<Buffer> targetBuffer)

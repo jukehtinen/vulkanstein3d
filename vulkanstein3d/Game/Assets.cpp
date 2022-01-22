@@ -3,62 +3,88 @@
 #include "Assets.h"
 #include "MeshGenerator.h"
 
+#include "../Rendering/Buffer.h"
 #include "../Rendering/Texture.h"
+
 #include "../Wolf3dLoaders/Loaders.h"
 
 #include "xbrz/xbrz.h"
 
 namespace Game
 {
+std::shared_ptr<Rendering::Buffer> GetScaledTextureArrayData(std::shared_ptr<Rendering::Device> device, Wolf3dLoaders::Bitmap& bitmap, int scaleFactor)
+{
+    size_t textureSize = bitmap.width * bitmap.height * 4;
+    size_t scaledTextureSize = (scaleFactor * bitmap.width) * (scaleFactor * bitmap.height) * 4;
+
+    auto stagingBuffer = Rendering::Buffer::CreateStagingBuffer(device, nullptr, scaledTextureSize * bitmap.layers);
+    uint8_t* mapped = (uint8_t*)stagingBuffer->Map();
+
+    for (int i = 0; i < bitmap.layers; i++)
+    {
+        auto srcptr = reinterpret_cast<uint32_t*>(bitmap.data.data() + (i * textureSize));
+        auto dstptr = reinterpret_cast<uint32_t*>(mapped + (i * scaledTextureSize));
+        xbrz::scale(scaleFactor, srcptr, dstptr, bitmap.width, bitmap.height, xbrz::ColorFormat::ARGB_UNBUFFERED);
+    }
+
+    stagingBuffer->UnMap();
+    return stagingBuffer;
+}
+
+std::shared_ptr<Rendering::Texture> GetScaledTexture(std::shared_ptr<Rendering::Device> device, Wolf3dLoaders::Loaders& loaders, const std::vector<int> pictures, int scaleFactor)
+{
+    size_t textureSize = 0;
+    size_t scaledTextureSize = 0;
+    std::shared_ptr<Rendering::Buffer> stagingBuffer;
+    uint8_t* mapped = nullptr;
+    uint32_t width = 0;
+    uint32_t height = 0;
+
+    for (int i = 0; i < pictures.size(); i++)
+    {
+        auto bitmap = loaders.LoadPictureTexture(pictures[i]);
+        if (textureSize == 0)
+        {
+            textureSize = bitmap.width * bitmap.height * 4;
+            scaledTextureSize = (scaleFactor * bitmap.width) * (scaleFactor * bitmap.height) * 4;
+            stagingBuffer = Rendering::Buffer::CreateStagingBuffer(device, nullptr, scaledTextureSize * pictures.size());
+            mapped = (uint8_t*)stagingBuffer->Map();
+            width = bitmap.width;
+            height = bitmap.height;
+        }
+        assert(bitmap.width == width && bitmap.height == height);
+
+        auto srcptr = reinterpret_cast<uint32_t*>(bitmap.data.data());
+        auto dstptr = reinterpret_cast<uint32_t*>(mapped + (i * scaledTextureSize));
+        xbrz::scale(scaleFactor, srcptr, dstptr, bitmap.width, bitmap.height, xbrz::ColorFormat::ARGB_UNBUFFERED);
+    }
+
+    stagingBuffer->UnMap();
+    return Rendering::Texture::CreateTexture(device, stagingBuffer, scaleFactor * width, scaleFactor * height, pictures.size());
+}
+
 Assets::Assets(std::shared_ptr<Rendering::Device> device, const std::filesystem::path& dataPath)
 {
     Wolf3dLoaders::Loaders loaders{dataPath};
 
-    int scale = 4;
+    int scaleFactor = 4;
 
-    /*auto introBitmap = loaders.LoadPictureTexture(Wolf3dLoaders::Pictures::IntroScreen);
-    
-    if (scale == 1)
-    {
-        auto texture = Rendering::Texture::CreateTexture(device, introBitmap.data.data(), introBitmap.width, introBitmap.height);
-        _textures.push_back(texture);
-    }
-    else
-    {
-        std::vector<uint8_t> scaledData;
-        scaledData.resize((scale * introBitmap.width) * (scale * introBitmap.height) * 4);
-        xbrz::scale(scale, (uint32_t*)introBitmap.data.data(), (uint32_t*)scaledData.data(), introBitmap.width, introBitmap.height, xbrz::ColorFormat::ARGB);
+    AddTexture("tex_gui_loading", GetScaledTexture(device, loaders, {24, 25}, scaleFactor));
+    AddTexture("tex_gui_intro", GetScaledTexture(device, loaders, {87}, scaleFactor));
+    AddTexture("tex_gui_weapons", GetScaledTexture(device, loaders, {91, 92, 93, 94}, scaleFactor));
+    AddTexture("tex_gui_keys", GetScaledTexture(device, loaders, {95, 96, 97}, scaleFactor));
 
-        auto texture = Rendering::Texture::CreateTexture(device, scaledData.data(), scale * introBitmap.width, scale * introBitmap.height);
-        _textures.push_back(texture);
-    }*/
-
-    const size_t textureSize = 64 * 64 * 4;
-    const size_t scaledTextureSize = (scale * 64) * (scale * 64) * 4;
+    // numbers 45-
+    // letters 56-81
+    // numbers white 99-
 
     auto wallBitmap = loaders.LoadWallTextures();
-    std::vector<uint8_t> scaledWallTextureArray(scaledTextureSize * wallBitmap.layers);
-    for (int i = 0; i < wallBitmap.layers; i++)
-    {
-        uint32_t* srcptr = reinterpret_cast<uint32_t*>(wallBitmap.data.data() + (i * textureSize));
-        uint32_t* dstptr = reinterpret_cast<uint32_t*>(scaledWallTextureArray.data() + (i * scaledTextureSize));
-
-        xbrz::scale(scale, srcptr, dstptr, wallBitmap.width, wallBitmap.height, xbrz::ColorFormat::ARGB_UNBUFFERED);
-    }
-
-    AddTexture("tex_walls", Rendering::Texture::CreateTexture(device, scaledWallTextureArray.data(), scale * 64, scale * 64, wallBitmap.layers));
+    auto buffer = GetScaledTextureArrayData(device, wallBitmap, scaleFactor);
+    AddTexture("tex_walls", Rendering::Texture::CreateTexture(device, buffer, scaleFactor * wallBitmap.width, scaleFactor * wallBitmap.height, wallBitmap.layers));
 
     auto spriteBitmap = loaders.LoadSpriteTextures();
-    std::vector<uint8_t> scaledSpriteTextureArray(scaledTextureSize * spriteBitmap.layers);
-    for (int i = 0; i < spriteBitmap.layers; i++)
-    {
-        uint32_t* srcptr = reinterpret_cast<uint32_t*>(spriteBitmap.data.data() + (i * textureSize));
-        uint32_t* dstptr = reinterpret_cast<uint32_t*>(scaledSpriteTextureArray.data() + (i * scaledTextureSize));
-
-        xbrz::scale(scale, srcptr, dstptr, spriteBitmap.width, spriteBitmap.height, xbrz::ColorFormat::ARGB_UNBUFFERED);
-    }
-
-    AddTexture("tex_sprites", Rendering::Texture::CreateTexture(device, scaledSpriteTextureArray.data(), scale * 64, scale * 64, spriteBitmap.layers));
+    buffer = GetScaledTextureArrayData(device, spriteBitmap, scaleFactor);
+    AddTexture("tex_sprites", Rendering::Texture::CreateTexture(device, buffer, scaleFactor * spriteBitmap.width, scaleFactor * spriteBitmap.height, spriteBitmap.layers));
 }
 
 Assets::~Assets()

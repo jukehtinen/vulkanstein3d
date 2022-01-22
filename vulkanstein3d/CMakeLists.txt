@@ -41,6 +41,7 @@ target_link_libraries(vulkanstein3d PRIVATE
     unofficial::vulkan-memory-allocator::vulkan-memory-allocator
     ${Vulkan_LIBRARY}
     xbrz
+    spirvreflect
 )
 
 target_compile_definitions(vulkanstein3d PUBLIC VULKAN_DEBUG)

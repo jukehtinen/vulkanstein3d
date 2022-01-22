@@ -52,7 +52,7 @@ static void GenerateCube(Vertex* verts, uint32_t* indices, uint32_t tileId)
     std::memcpy(&indices[0], &cubeIndices[0], 36 * sizeof(uint32_t));
 }
 
-Game::Mesh MeshGenerator::BuildFloorPlaneMesh(std::shared_ptr<Rendering::Device> device, int size)
+Rendering::Mesh MeshGenerator::BuildFloorPlaneMesh(std::shared_ptr<Rendering::Device> device, int size)
 {
     const glm::vec3 normal{0.0f, 1.0f, 0.0f};
     const uint32_t quadIndices[] = {0, 2, 1, 1, 2, 3};
@@ -95,7 +95,7 @@ Game::Mesh MeshGenerator::BuildFloorPlaneMesh(std::shared_ptr<Rendering::Device>
     return {vertexBuffer, indexBuffer, (uint32_t)indices.size()};
 }
 
-Game::Mesh MeshGenerator::BuildCubeMesh(std::shared_ptr<Rendering::Device> device)
+Rendering::Mesh MeshGenerator::BuildCubeMesh(std::shared_ptr<Rendering::Device> device)
 {
     std::vector<Vertex> verts(6 * 4);
     std::vector<uint32_t> indices(36);
@@ -114,7 +114,7 @@ Game::Mesh MeshGenerator::BuildCubeMesh(std::shared_ptr<Rendering::Device> devic
     return {vertexBuffer, indexBuffer, (uint32_t)indices.size()};
 }
 
-Game::Mesh MeshGenerator::BuildMapMesh(std::shared_ptr<Rendering::Device> device, const Wolf3dLoaders::Map& map)
+Rendering::Mesh MeshGenerator::BuildMapMesh(std::shared_ptr<Rendering::Device> device, const Wolf3dLoaders::Map& map)
 {
     const auto solidWallCount = std::count_if(std::begin(map.tiles[0]), std::end(map.tiles[0]), [](uint16_t i) { return i != 0 && i <= 53; });
 

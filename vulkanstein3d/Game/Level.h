@@ -1,7 +1,15 @@
 #pragma once
 
+#include "../Rendering/Renderer.h"
 #include "Components.h"
+#include "MeshGenerator.h"
+
 #include "entt/entt.hpp"
+
+namespace Rendering
+{
+class Device;
+}
 
 namespace Wolf3dLoaders
 {
@@ -17,7 +25,7 @@ constexpr uint32_t TileBlocksShooting = 0x2;
 class Level
 {
   public:
-    Level(std::shared_ptr<Wolf3dLoaders::Map> map);
+    Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map);
 
     std::shared_ptr<Wolf3dLoaders::Map> GetMap() { return _map; }
     const std::vector<uint32_t>& GetTiles() { return _tileMap; }
@@ -26,6 +34,9 @@ class Level
     entt::entity GetPlayerEntity() { return _player; }
 
     void Update(double delta);
+
+    Rendering::Mesh _mapMesh;
+    Rendering::Mesh _floorMesh;
 
   private:
     void CreatePlayerEntity(int index);
@@ -36,6 +47,7 @@ class Level
     glm::vec3 IndexToPosition(int index, float height = 0.0f);
 
   private:
+    Rendering::Renderer& _renderer;
     std::shared_ptr<Wolf3dLoaders::Map> _map;
     std::vector<uint32_t> _tileMap;
 

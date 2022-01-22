@@ -24,6 +24,6 @@ class PlayerController
     glm::vec3 _worldUp{0.0f, 1.0f, 0.0f};
 
     float _yaw = 0.0f;
-    float _pitch = -55.0f;
+    float _pitch = -80.0f;
 };
 } // namespace Game

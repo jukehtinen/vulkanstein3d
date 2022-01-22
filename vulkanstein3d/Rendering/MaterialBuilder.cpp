@@ -17,71 +17,70 @@ MaterialBuilder& MaterialBuilder::SetPipeline(std::shared_ptr<Rendering::Pipelin
     return *this;
 }
 
-MaterialBuilder& MaterialBuilder::SetTexture(std::shared_ptr<Texture> texture)
+MaterialBuilder& MaterialBuilder::SetTexture(uint32_t binding, std::shared_ptr<Texture> texture)
 {
-    _texture = texture;
+    _textures[binding] = texture;
     return *this;
 }
 
-MaterialBuilder& MaterialBuilder::SetUboHack(std::shared_ptr<Buffer> ubo, std::shared_ptr<Buffer> storage)
+MaterialBuilder& MaterialBuilder::SetTexture(uint32_t binding, std::vector<std::shared_ptr<Texture>> textures)
 {
-    _ubo = ubo;
-    _storage = storage;
+    _textureVariableCounts[binding] = textures;
+    return *this;
+}
+
+MaterialBuilder& MaterialBuilder::SetBuffer(uint32_t binding, std::shared_ptr<Buffer> buffer)
+{
+    _buffers[binding] = buffer;
     return *this;
 }
 
 std::shared_ptr<Material> MaterialBuilder::Build(std::shared_ptr<Device> device)
 {
-    if (_texture)
+    // hack
+    if (!_pipeline->descriptorSetLayout)
+        return std::make_shared<Material>(_pipeline, vk::DescriptorSet{});
+
+    std::vector<vk::DescriptorPoolSize> descriptorPoolSizes = {{vk::DescriptorType::eCombinedImageSampler, 10}};
+    auto descriptorPool = device->Get().createDescriptorPool({{}, 1, descriptorPoolSizes}).value;
+
+    vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo{descriptorPool, 1, &_pipeline->descriptorSetLayout};
+
+    uint32_t descriptors = _textureVariableCounts.size();
+    vk::DescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo{1, &descriptors};
+    if (_textureVariableCounts.size() > 0)
     {
-        // hack
-
-        std::vector<vk::DescriptorPoolSize> descriptorPoolSizes = {{vk::DescriptorType::eCombinedImageSampler, 10}};
-        auto descriptorPool = device->Get().createDescriptorPool({{}, 1, descriptorPoolSizes}).value;
-
-        if (_texture->_viewType == vk::ImageViewType::e2D)
-        {
-            vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo{descriptorPool, 1, &_pipeline->descriptorSetLayout};
-            uint32_t descriptors = 1;
-            vk::DescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo{1, &descriptors};
-            descriptorSetAllocateInfo.pNext = &variableDescriptorCountAllocInfo;
-
-            auto descriptorSet = device->Get().allocateDescriptorSets(descriptorSetAllocateInfo).value.front();
-
-            vk::DescriptorImageInfo imageInfo{_texture->_sampler, _texture->_imageView, vk::ImageLayout::eShaderReadOnlyOptimal};
-
-            std::vector<vk::WriteDescriptorSet> writes{vk::WriteDescriptorSet{descriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &imageInfo, {}, {}}};
-
-            device->Get().updateDescriptorSets(writes, {});
-
-            return std::make_shared<Material>(_pipeline, descriptorSet);
-        }
-        else
-        {
-            vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo{descriptorPool, 1, &_pipeline->descriptorSetLayout};
-
-            auto descriptorSet = device->Get().allocateDescriptorSets(descriptorSetAllocateInfo).value.front();
-
-            vk::DescriptorImageInfo imageInfo{_texture->_sampler, _texture->_imageView, vk::ImageLayout::eShaderReadOnlyOptimal};
-
-            std::vector<vk::WriteDescriptorSet> writes{vk::WriteDescriptorSet{descriptorSet, 0, 0, 1, vk::DescriptorType::eCombinedImageSampler, &imageInfo, {}, {}}};
-
-            if (_ubo != nullptr)
-            {
-                vk::DescriptorBufferInfo bufferInfo1{_ubo->Get(), 0, VK_WHOLE_SIZE};
-                vk::DescriptorBufferInfo bufferInfo2{_storage->Get(), 0, VK_WHOLE_SIZE};
-                writes.push_back(vk::WriteDescriptorSet{ descriptorSet, 1, 0, 1, vk::DescriptorType::eUniformBuffer, {}, &bufferInfo1, {} });
-                writes.push_back(vk::WriteDescriptorSet{ descriptorSet, 2, 0, 1, vk::DescriptorType::eStorageBuffer, {}, &bufferInfo2, {} });
-                device->Get().updateDescriptorSets(writes, {});
-            }
-            else
-            {
-                device->Get().updateDescriptorSets(writes, {});
-            }            
-
-            return std::make_shared<Material>(_pipeline, descriptorSet);
-        }
+        descriptorSetAllocateInfo.pNext = &variableDescriptorCountAllocInfo;
     }
-    return std::make_shared<Material>(_pipeline, vk::DescriptorSet{});
+
+    auto descriptorSet = device->Get().allocateDescriptorSets(descriptorSetAllocateInfo).value.front();
+
+    for (const auto& [binding, texture] : _textures)
+    {
+        vk::DescriptorImageInfo imageInfo{texture->_sampler, texture->_imageView, vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::WriteDescriptorSet write{descriptorSet, binding, 0, 1, vk::DescriptorType::eCombinedImageSampler, &imageInfo, {}, {}};
+        device->Get().updateDescriptorSets(1, &write, 0, nullptr);
+    }
+
+    for (const auto& [binding, textures] : _textureVariableCounts)
+    {
+        std::vector<vk::DescriptorImageInfo> imageInfos;
+        for (const auto& texture : textures)
+            imageInfos.push_back(vk::DescriptorImageInfo{texture->_sampler, texture->_imageView, vk::ImageLayout::eShaderReadOnlyOptimal});
+
+        vk::WriteDescriptorSet write{descriptorSet, binding, 0, vk::DescriptorType::eCombinedImageSampler, imageInfos, {}, {}};
+        device->Get().updateDescriptorSets(1, &write, 0, nullptr);
+    }
+
+    int hack = 0;
+    for (const auto& [binding, buffer] : _buffers)
+    {
+        vk::DescriptorBufferInfo bufferInfo{buffer->Get(), 0, VK_WHOLE_SIZE};
+        vk::WriteDescriptorSet write{descriptorSet, binding, 0, 1, hack == 0 ? vk::DescriptorType::eUniformBuffer : vk::DescriptorType::eStorageBuffer, {}, &bufferInfo, {}};
+        device->Get().updateDescriptorSets(1, &write, 0, nullptr);
+        hack++;
+    }
+
+    return std::make_shared<Material>(_pipeline, descriptorSet);
 }
 } // namespace Rendering

@@ -21,7 +21,11 @@ Texture::~Texture()
 std::shared_ptr<Texture> Texture::CreateTexture(std::shared_ptr<Device> device, void* data, uint32_t width, uint32_t height, uint32_t layers)
 {
     auto stagingBuffer = Buffer::CreateStagingBuffer(device, data, (width * height * 4) * layers);
+    return CreateTexture(device, stagingBuffer, width, height, layers);
+}
 
+std::shared_ptr<Texture> Texture::CreateTexture(std::shared_ptr<Device> device, std::shared_ptr<Buffer> stagingBuffer, uint32_t width, uint32_t height, uint32_t layers)
+{
     vk::ImageCreateInfo imageCreateInfo{};
     imageCreateInfo.setImageType(vk::ImageType::e2D);
     imageCreateInfo.setFormat(vk::Format::eR8G8B8A8Unorm);

@@ -1,12 +1,12 @@
 #include "../Common.h"
 
 #include "PipelineBuilder.h"
+#include "SPIRV-Reflect/spirv_reflect.h"
 
 #include <fstream>
 
 namespace Rendering
 {
-
 PipelineBuilder PipelineBuilder::Builder()
 {
     PipelineBuilder builder{};
@@ -31,13 +31,6 @@ PipelineBuilder& PipelineBuilder::SetRasterization(vk::CullModeFlags cullMode, v
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::SetVertexInput(const std::vector<vk::VertexInputBindingDescription>& bindingDescriptions, const std::vector<vk::VertexInputAttributeDescription>& attributes)
-{
-    _bindingDescriptions = bindingDescriptions;
-    _vertexAttributes = attributes;
-    return *this;
-}
-
 PipelineBuilder& PipelineBuilder::SetDepthState(bool depthTest, bool depthWrite)
 {
     _isDepthTest = depthTest;
@@ -57,19 +50,6 @@ PipelineBuilder& PipelineBuilder::SetRenderpass(vk::RenderPass renderPass)
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::SetLayouts(vk::PipelineLayout layout, vk::DescriptorSetLayout descriptorLayout)
-{
-    _pipelineLayout = layout;
-    _descriptorLayout = descriptorLayout;
-    return *this;
-}
-
-PipelineBuilder& PipelineBuilder::SetPushConstants(uint32_t size)
-{
-    _pushConstantSize = size;
-    return *this;
-}
-
 PipelineBuilder& PipelineBuilder::SetDynamicState(const std::vector<vk::DynamicState>& dynamicState)
 {
     _dynamicState = dynamicState;
@@ -80,35 +60,28 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(std::shared_ptr<Device> device)
 {
     _device = device;
 
-    /* std::vector bindings{vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment, nullptr}};
+    auto vertShader = LoadShaderFile(_vertFile);
+    auto fragShader = LoadShaderFile(_fragFile);
 
-    std::vector<vk::DescriptorBindingFlags> descriptorBindingFlags = {vk::DescriptorBindingFlagBits::eVariableDescriptorCount};
-
-    const vk::DescriptorSetLayoutBindingFlagsCreateInfo descriptorSetLayoutBindingFlagsCreateInfo{descriptorBindingFlags};
-
-    vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{{}, bindings};
-    descriptorSetLayoutCreateInfo.pNext = &descriptorSetLayoutBindingFlagsCreateInfo;
-
-    auto descriptorSetLayout = device->Get().createDescriptorSetLayout(descriptorSetLayoutCreateInfo).value;
-
-    std::vector<vk::DescriptorSetLayout> descriptorSetLayouts{descriptorSetLayout};
-    std::vector<vk::PushConstantRange> pushConstantRanges;
-
-    if (_pushConstantSize > 0)
-    {
-        pushConstantRanges.push_back(vk::PushConstantRange{vk::ShaderStageFlagBits::eAllGraphics, 0, _pushConstantSize});
-    }
-
-    _pipelineLayout = _device->Get().createPipelineLayout({{}, descriptorSetLayouts, pushConstantRanges}).value;*/
-
+    ReflectVertexInput(vertShader);
     const vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{{}, _bindingDescriptions, _vertexAttributes};
 
-    auto vertShaderModule = LoadShaderFile(_vertFile);
-    auto fragShaderModule = LoadShaderFile(_fragFile);
+    ReflectLayout(vertShader);
+    ReflectLayout(fragShader);
+
+    std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+    for (const auto& [set, bindings] : _setBindings)
+    {
+        vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo{{}, bindings};
+        descriptorSetLayouts.push_back(device->Get().createDescriptorSetLayout(descriptorSetLayoutCreateInfo).value);
+        _descriptorLayout = descriptorSetLayouts[0];
+    }
+
+    _pipelineLayout = device->Get().createPipelineLayout({{}, descriptorSetLayouts, _pushConstants}).value;
 
     std::vector stages = {
-        vk::PipelineShaderStageCreateInfo{{}, vk::ShaderStageFlagBits::eVertex, vertShaderModule, "main"},
-        vk::PipelineShaderStageCreateInfo{{}, vk::ShaderStageFlagBits::eFragment, fragShaderModule, "main"},
+        vk::PipelineShaderStageCreateInfo{{}, vk::ShaderStageFlagBits::eVertex, vertShader.shaderModule, "main"},
+        vk::PipelineShaderStageCreateInfo{{}, vk::ShaderStageFlagBits::eFragment, fragShader.shaderModule, "main"},
     };
 
     const vk::PipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo{{}, vk::PrimitiveTopology::eTriangleList};
@@ -163,13 +136,114 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(std::shared_ptr<Device> device)
 
     auto [result, pipeline] = _device->Get().createGraphicsPipeline({}, graphicsPipelineCreateInfo);
 
-    _device->Get().destroyShaderModule(vertShaderModule);
-    _device->Get().destroyShaderModule(fragShaderModule);
+    _device->Get().destroyShaderModule(vertShader.shaderModule);
+    _device->Get().destroyShaderModule(fragShader.shaderModule);
+    spvReflectDestroyShaderModule(vertShader.reflectInfo);
+    spvReflectDestroyShaderModule(fragShader.reflectInfo);
+    delete vertShader.reflectInfo;
+    delete fragShader.reflectInfo;
 
     return std::make_shared<Pipeline>(pipeline, _pipelineLayout, _descriptorLayout);
 }
 
-vk::ShaderModule PipelineBuilder::LoadShaderFile(const std::string& shaderFile)
+void PipelineBuilder::ReflectVertexInput(Shader& shader)
+{
+    if (shader.reflectInfo->shader_stage == SPV_REFLECT_SHADER_STAGE_VERTEX_BIT)
+    {
+        std::vector<SpvReflectInterfaceVariable*> inputVars(shader.reflectInfo->input_variable_count);
+        spvReflectEnumerateInputVariables(shader.reflectInfo, &shader.reflectInfo->input_variable_count, inputVars.data());
+
+        // Remove built-ins (gl_VertexIndex etc.)
+        inputVars.erase(std::remove_if(inputVars.begin(), inputVars.end(), [](SpvReflectInterfaceVariable* inputVar) { return inputVar->built_in != -1; }), inputVars.end());
+
+        vk::VertexInputBindingDescription bindingDescription{};
+
+        _vertexAttributes.resize(inputVars.size());
+        for (size_t i = 0; i < inputVars.size(); ++i)
+        {
+            _vertexAttributes[i].location = inputVars[i]->location;
+            _vertexAttributes[i].binding = bindingDescription.binding;
+            _vertexAttributes[i].format = static_cast<vk::Format>(inputVars[i]->format);
+            _vertexAttributes[i].offset = 0; // final offset computed below after sorting.
+        }
+        // Sort attributes by location
+        std::sort(std::begin(_vertexAttributes), std::end(_vertexAttributes),
+                  [](const vk::VertexInputAttributeDescription& a, const vk::VertexInputAttributeDescription& b) { return a.location < b.location; });
+
+        // Compute final offsets of each attribute, and total vertex stride.
+        for (auto& attribute : _vertexAttributes)
+        {
+            // Check sizes from https://github.com/KhronosGroup/SPIRV-Reflect/blob/4689b3360cb38283b67926a065a0f2cc285928b5/examples/main_io_variables.cpp#L14
+            uint32_t formatSize = 0;
+            switch (attribute.format)
+            {
+            case vk::Format::eR32G32Sfloat:
+                formatSize = 8;
+                break;
+            case vk::Format::eR32G32B32Sfloat:
+                formatSize = 12;
+                break;
+            case vk::Format::eR32G32B32A32Sfloat:
+                formatSize = 16;
+                break;
+            default:
+                spdlog::error("Unknown vk::Format size: {}", vk::to_string(attribute.format));
+                break;
+            }
+
+            attribute.offset = bindingDescription.stride;
+            bindingDescription.stride += formatSize;
+        }
+
+        _bindingDescriptions.push_back(bindingDescription);
+    }
+}
+
+void PipelineBuilder::ReflectLayout(Shader& shader)
+{
+    std::vector<SpvReflectDescriptorSet*> sets(shader.reflectInfo->descriptor_set_count);
+    spvReflectEnumerateDescriptorSets(shader.reflectInfo, &shader.reflectInfo->descriptor_set_count, sets.data());
+
+    for (size_t i = 0; i < sets.size(); i++)
+    {
+        const SpvReflectDescriptorSet& refl_set = *(sets[i]);
+
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+
+        auto iter = _setBindings.find(refl_set.set);
+        if (iter != _setBindings.end())
+            bindings = iter->second;
+
+        for (uint32_t b = 0; b < refl_set.binding_count; b++)
+        {
+            const SpvReflectDescriptorBinding& refl_binding = *(refl_set.bindings[b]);
+
+            vk::DescriptorSetLayoutBinding layoutBinding{};
+            layoutBinding.binding = refl_binding.binding;
+            layoutBinding.descriptorType = static_cast<vk::DescriptorType>(refl_binding.descriptor_type);
+            layoutBinding.descriptorCount = 1;
+            for (uint32_t i_dim = 0; i_dim < refl_binding.array.dims_count; ++i_dim)
+            {
+                layoutBinding.descriptorCount *= refl_binding.array.dims[i_dim];
+            }
+            layoutBinding.stageFlags = static_cast<vk::ShaderStageFlagBits>(shader.reflectInfo->shader_stage);
+
+            bindings.push_back(layoutBinding);
+        }
+
+        _setBindings[refl_set.set] = bindings;
+    }
+
+    std::vector<SpvReflectBlockVariable*> pushConstants(shader.reflectInfo->push_constant_block_count);
+    spvReflectEnumeratePushConstantBlocks(shader.reflectInfo, &shader.reflectInfo->push_constant_block_count, pushConstants.data());
+    for (uint32_t i = 0; i < pushConstants.size(); i++)
+    {
+        _pushConstants.push_back(vk::PushConstantRange{static_cast<vk::ShaderStageFlagBits>(shader.reflectInfo->shader_stage),
+                                                       pushConstants[i]->offset, pushConstants[i]->size});
+    }
+}
+
+Shader PipelineBuilder::LoadShaderFile(const std::string& shaderFile)
 {
     std::ifstream file(shaderFile, std::ios::ate | std::ios::binary);
 
@@ -179,7 +253,6 @@ vk::ShaderModule PipelineBuilder::LoadShaderFile(const std::string& shaderFile)
     size_t fileSize = (size_t)file.tellg();
 
     std::vector<uint32_t> codeBuffer(fileSize / sizeof(uint32_t));
-
     file.seekg(0);
     file.read((char*)codeBuffer.data(), fileSize);
 
@@ -191,7 +264,14 @@ vk::ShaderModule PipelineBuilder::LoadShaderFile(const std::string& shaderFile)
         return {};
     }
 
-    return shaderModule;
+    auto reflection = new SpvReflectShaderModule;
+    if (spvReflectCreateShaderModule(fileSize, codeBuffer.data(), reflection) != SPV_REFLECT_RESULT_SUCCESS)
+    {
+        spdlog::error("[Vulkan] spvReflectCreateShaderModule failed");
+        return {};
+    }
+
+    return {shaderModule, reflection};
 }
 
 } // namespace Rendering

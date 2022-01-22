@@ -17,8 +17,10 @@ class Buffer
 
     vk::Buffer Get() const { return _buffer; }
     size_t GetSize() const { return _size; }
-    void CopyTo(std::shared_ptr<Buffer> targetBuffer);
+    void* Map();
+    void UnMap();
 
+    void CopyTo(std::shared_ptr<Buffer> targetBuffer);
     void SetData(void* data, size_t size);
 
   private:

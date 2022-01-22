@@ -3,14 +3,19 @@
 #include "Components.h"
 #include "Intersection.h"
 #include "Level.h"
+#include "MeshGenerator.h"
 
+#include "../Rendering/Device.h"
 #include "../Wolf3dLoaders/Loaders.h"
 
 namespace Game
 {
-Level::Level(std::shared_ptr<Wolf3dLoaders::Map> map)
-    : _map(map)
+Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map)
+    : _renderer(renderer), _map(map)
 {
+    _floorMesh = Game::MeshGenerator::BuildFloorPlaneMesh(renderer._device, map->width);
+    _mapMesh = Game::MeshGenerator::BuildMapMesh(renderer._device, *map.get());
+
     using namespace Wolf3dLoaders;
 
     _tileMap.resize(map->width * map->width);
