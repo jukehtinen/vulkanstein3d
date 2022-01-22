@@ -44,12 +44,6 @@ PipelineBuilder& PipelineBuilder::SetBlend(bool enable)
     return *this;
 }
 
-PipelineBuilder& PipelineBuilder::SetRenderpass(vk::RenderPass renderPass)
-{
-    _renderPass = renderPass;
-    return *this;
-}
-
 PipelineBuilder& PipelineBuilder::SetDynamicState(const std::vector<vk::DynamicState>& dynamicState)
 {
     _dynamicState = dynamicState;
@@ -120,7 +114,15 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(std::shared_ptr<Device> device)
 
     const vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo{{}, _dynamicState};
 
+    // todo: hard coded renderpass stuff
+    std::vector<vk::Format> colorAttachmentFormats{vk::Format::eB8G8R8A8Unorm};
+    vk::PipelineRenderingCreateInfoKHR renderingCreateInfo{};
+    renderingCreateInfo.setColorAttachmentFormats(colorAttachmentFormats);
+    renderingCreateInfo.setDepthAttachmentFormat(vk::Format::eD32Sfloat);
+    renderingCreateInfo.setStencilAttachmentFormat(vk::Format::eD32Sfloat);
+
     vk::GraphicsPipelineCreateInfo graphicsPipelineCreateInfo{};
+    graphicsPipelineCreateInfo.setPNext(&renderingCreateInfo);
     graphicsPipelineCreateInfo.setStages(stages);
     graphicsPipelineCreateInfo.setPVertexInputState(&vertexInputStateCreateInfo);
     graphicsPipelineCreateInfo.setPInputAssemblyState(&inputAssemblyStateCreateInfo);
@@ -131,7 +133,7 @@ std::shared_ptr<Pipeline> PipelineBuilder::Build(std::shared_ptr<Device> device)
     graphicsPipelineCreateInfo.setPColorBlendState(&colorBlendStateCreateInfo);
     graphicsPipelineCreateInfo.setPDynamicState(&dynamicStateCreateInfo);
     graphicsPipelineCreateInfo.setLayout(_pipelineLayout);
-    graphicsPipelineCreateInfo.setRenderPass(_renderPass);
+    graphicsPipelineCreateInfo.setRenderPass(VK_NULL_HANDLE);
     graphicsPipelineCreateInfo.setSubpass(0);
 
     auto [result, pipeline] = _device->Get().createGraphicsPipeline({}, graphicsPipelineCreateInfo);
@@ -195,7 +197,8 @@ void PipelineBuilder::ReflectVertexInput(Shader& shader)
             bindingDescription.stride += formatSize;
         }
 
-        _bindingDescriptions.push_back(bindingDescription);
+        if (_vertexAttributes.size() > 0)
+            _bindingDescriptions.push_back(bindingDescription);
     }
 }
 

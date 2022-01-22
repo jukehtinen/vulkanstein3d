@@ -33,7 +33,6 @@ class PipelineBuilder
     PipelineBuilder& SetShaders(const std::string& vertFile, const std::string& fragFile);
     PipelineBuilder& SetDepthState(bool depthTest, bool depthWrite);
     PipelineBuilder& SetBlend(bool enable);
-    PipelineBuilder& SetRenderpass(vk::RenderPass renderPass);
     PipelineBuilder& SetDynamicState(const std::vector<vk::DynamicState>& dynamicState);
     PipelineBuilder& SetRasterization(vk::CullModeFlags cullMode = vk::CullModeFlagBits::eBack, vk::FrontFace frontFace = vk::FrontFace::eCounterClockwise);
 
@@ -47,8 +46,7 @@ class PipelineBuilder
     void ReflectLayout(Shader& shader);
 
   private:
-    std::shared_ptr<Device> _device;
-    vk::RenderPass _renderPass{};
+    std::shared_ptr<Device> _device;    
     vk::PipelineLayout _pipelineLayout{};
     vk::DescriptorSetLayout _descriptorLayout{};
 

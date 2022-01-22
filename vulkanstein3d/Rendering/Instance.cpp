@@ -1,6 +1,7 @@
 #include "../Common.h"
 
 #include "Instance.h"
+
 #include "../App/Window.h"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE;
@@ -82,8 +83,11 @@ static vk::DebugUtilsMessengerEXT CreateDebugCallback(vk::Instance instance)
     static auto messengerCallback =
         [](VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType,
            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) -> VkBool32 {
-        bool isError =
-            messageSeverity & VkDebugUtilsMessageSeverityFlagBitsEXT::VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+        // fixme: Ignore dynamic_rendering warning "fragment shader writes to output location 0" https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/3554
+        if (pCallbackData->messageIdNumber == 0x609a13b)
+            return false;
+
+        bool isError = messageSeverity & VkDebugUtilsMessageSeverityFlagBitsEXT::VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         spdlog::log(isError ? spdlog::level::err : spdlog::level::warn, pCallbackData->pMessage);
         return messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     };

@@ -9,7 +9,8 @@
 namespace Rendering
 {
 static const std::vector<const char*> requiredDeviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME};
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_MAINTENANCE1_EXTENSION_NAME,
+    VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME};
 
 Device::Device(vk::PhysicalDevice physicalDevice, vk::Device device, vk::Queue graphicsQueue, VmaAllocator allocator)
     : _physicalDevice(physicalDevice), _device(device), _graphicsQueue(graphicsQueue), _allocator(allocator)
@@ -107,14 +108,17 @@ std::shared_ptr<Device> Device::CreateDevice(std::shared_ptr<Instance> instance)
 
     vk::PhysicalDeviceSynchronization2FeaturesKHR synchronization2Features{};
     vk::PhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
+    vk::PhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeaturesKHR{};
     vk::PhysicalDeviceFeatures2 physicalDeviceFeatures2{};
 
+    descriptorIndexingFeatures.setPNext(&dynamicRenderingFeaturesKHR);
     synchronization2Features.setPNext(&descriptorIndexingFeatures);
     physicalDeviceFeatures2.setPNext(&synchronization2Features);
 
     physicalDevice.getFeatures2(&physicalDeviceFeatures2);
 
     synchronization2Features.setSynchronization2(true);
+    dynamicRenderingFeaturesKHR.setDynamicRendering(true);
 
     vk::DeviceCreateInfo deviceCreateInfo{{}, deviceQueueInfos, {}, requiredDeviceExtensions, {}};
     deviceCreateInfo.setPNext(&synchronization2Features);

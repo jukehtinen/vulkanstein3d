@@ -47,13 +47,12 @@ struct Sprite
     glm::vec4 data;
 };
 
-void CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass renderPass, Game::Assets& assets,
+void CreateMaterials(std::shared_ptr<Rendering::Device> device, Game::Assets& assets,
                      std::shared_ptr<Rendering::Buffer> frameUbo, std::shared_ptr<Rendering::Buffer> storage)
 {
 
     {
         auto testPipeline = Rendering::PipelineBuilder::Builder()
-                                .SetRenderpass(renderPass)
                                 .SetDepthState(false, false)
                                 .SetRasterization(vk::CullModeFlagBits::eNone, vk::FrontFace::eCounterClockwise)
                                 .SetShaders("Shaders/mat_hud.vert.spv", "Shaders/mat_hud.frag.spv")
@@ -82,7 +81,6 @@ void CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass r
 
     {
         auto testPipeline = Rendering::PipelineBuilder::Builder()
-                                .SetRenderpass(renderPass)
                                 .SetShaders("Shaders/mat_map.vert.spv", "Shaders/mat_map.frag.spv")
                                 .Build(device);
 
@@ -92,9 +90,8 @@ void CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass r
                                           .Build(device));
     }
 
-    {       
+    {
         auto testPipeline = Rendering::PipelineBuilder::Builder()
-                                .SetRenderpass(renderPass)
                                 .SetShaders("Shaders/mat_sprite.vert.spv", "Shaders/mat_sprite.frag.spv")
                                 .SetBlend(true)
                                 .Build(device);
@@ -109,7 +106,6 @@ void CreateMaterials(std::shared_ptr<Rendering::Device> device, vk::RenderPass r
 
     {
         auto testPipeline2 = Rendering::PipelineBuilder::Builder()
-                                 .SetRenderpass(renderPass)
                                  .SetShaders("Shaders/mat_ground.vert.spv", "Shaders/mat_ground.frag.spv")
                                  .Build(device);
 
@@ -157,7 +153,7 @@ int main(int argc, char* argv[])
     auto frameConstsUbo = Rendering::Buffer::CreateUniformBuffer(renderer._device, sizeof(FrameConstantsUBO));
     auto modelStorage = Rendering::Buffer::CreateStorageBuffer(renderer._device, sizeof(Sprite) * 256);
 
-    CreateMaterials(renderer._device, renderer._renderPass, assets, frameConstsUbo, modelStorage);
+    CreateMaterials(renderer._device, assets, frameConstsUbo, modelStorage);
 
     auto groundMaterial = assets.GetMaterial("mat_ground");
     auto mapMaterial = assets.GetMaterial("mat_map");
@@ -191,12 +187,7 @@ int main(int argc, char* argv[])
 
             recreateSwapchain = false;
 
-            for (auto& fb : renderer._frameBuffers)
-                dev.destroyFramebuffer(fb);
-
             renderer._depthTexture = Rendering::Texture::CreateDepthTexture(device, renderer._swapchain->GetExtent().width, renderer._swapchain->GetExtent().height);
-
-            renderer._frameBuffers = renderer.CreateFramebuffers(device, renderer._swapchain, renderer._renderPass, renderer._depthTexture);
         }
 
         auto nowTime = std::chrono::high_resolution_clock::now();
@@ -214,7 +205,7 @@ int main(int argc, char* argv[])
         {
             Sprite sprite;
             sprite.model = glm::translate(glm::mat4{1.0f}, itemtransform.position);
-            sprite.data = glm::vec4(csprite.spriteIndex);
+            sprite.data = glm::vec4((float)csprite.spriteIndex);
             spriteModelMats.push_back(sprite);
         }
         modelStorage->SetData((void*)spriteModelMats.data(), sizeof(Sprite) * spriteModelMats.size());
@@ -282,18 +273,51 @@ int main(int argc, char* argv[])
 
         commandBuffer.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-        std::vector clearValues{vk::ClearValue{vk::ClearColorValue{std::array<float, 4>{0.22f, 0.22f, 0.22f, 1.0f}}},
-                                vk::ClearValue{vk::ClearDepthStencilValue{1.0f}}};
+        std::vector<vk::ImageMemoryBarrier2KHR> attachmentBarriers(2);
+        // Swapchain image -> eColorAttachmentOptimal
+        attachmentBarriers[0].setImage(renderer._swapchain->GetImages()[imageIndex].first);
+        attachmentBarriers[0].setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+        attachmentBarriers[0].setOldLayout(vk::ImageLayout::eUndefined);
+        attachmentBarriers[0].setNewLayout(vk::ImageLayout::eColorAttachmentOptimal);
+        attachmentBarriers[0].setSrcStageMask(vk::PipelineStageFlagBits2KHR::eTopOfPipe);
+        attachmentBarriers[0].setDstStageMask(vk::PipelineStageFlagBits2KHR::eColorAttachmentOutput);
+        attachmentBarriers[0].setSrcAccessMask(vk::AccessFlagBits2KHR::eNone);
+        attachmentBarriers[0].setDstAccessMask(vk::AccessFlagBits2KHR::eColorAttachmentWrite);
+        // Depth image -> eColorAttachmentOptimal
+        attachmentBarriers[1].setImage(renderer._depthTexture->_image);
+        attachmentBarriers[1].setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1});
+        attachmentBarriers[1].setOldLayout(vk::ImageLayout::eUndefined);
+        attachmentBarriers[1].setNewLayout(vk::ImageLayout::eDepthAttachmentOptimal);
+        attachmentBarriers[1].setSrcStageMask(vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests);
+        attachmentBarriers[1].setDstStageMask(vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests);
+        attachmentBarriers[1].setSrcAccessMask(vk::AccessFlagBits2KHR::eNone);
+        attachmentBarriers[1].setDstAccessMask(vk::AccessFlagBits2KHR::eDepthStencilAttachmentWrite);
+        commandBuffer.pipelineBarrier2KHR(vk::DependencyInfoKHR{{}, {}, {}, attachmentBarriers});
 
-        vk::RenderPassBeginInfo renderPassBeginInfo{};
-        renderPassBeginInfo.renderPass = renderer._renderPass;
-        renderPassBeginInfo.renderArea.offset.x = 0;
-        renderPassBeginInfo.renderArea.offset.y = 0;
-        renderPassBeginInfo.renderArea.extent = renderer._swapchain->GetExtent();
-        renderPassBeginInfo.framebuffer = renderer._frameBuffers[imageIndex];
-        renderPassBeginInfo.setClearValues(clearValues);
+        vk::RenderingAttachmentInfoKHR colorAttachment{};
+        colorAttachment.setClearValue(vk::ClearValue{vk::ClearColorValue{std::array<float, 4>{0.22f, 0.22f, 0.22f, 1.0f}}});
+        colorAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
+        colorAttachment.setStoreOp(vk::AttachmentStoreOp::eStore);
+        colorAttachment.setResolveMode(vk::ResolveModeFlagBits::eNone);
+        colorAttachment.setImageLayout(vk::ImageLayout::eAttachmentOptimalKHR);
+        colorAttachment.setImageView(renderer._swapchain->GetImages()[imageIndex].second);
 
-        commandBuffer.beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+        vk::RenderingAttachmentInfoKHR depthAttachment{};
+        depthAttachment.setClearValue(vk::ClearValue{vk::ClearDepthStencilValue{1.0f}});
+        depthAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
+        depthAttachment.setStoreOp(vk::AttachmentStoreOp::eDontCare);
+        depthAttachment.setResolveMode(vk::ResolveModeFlagBits::eNone);
+        depthAttachment.setImageLayout(vk::ImageLayout::eDepthAttachmentOptimal);
+        depthAttachment.setImageView(renderer._depthTexture->_imageView);
+
+        vk::RenderingInfoKHR renderingInfo{};
+        renderingInfo.setPColorAttachments(&colorAttachment);
+        renderingInfo.setColorAttachmentCount(1);
+        renderingInfo.setPDepthAttachment(&depthAttachment);
+        renderingInfo.setRenderArea(vk::Rect2D{{0, 0}, renderer._swapchain->GetExtent()});
+        renderingInfo.setLayerCount(1);
+
+        commandBuffer.beginRenderingKHR(renderingInfo);
 
         const glm::vec4 viewArea{0.0f, 0.0f, renderer._swapchain->GetExtent().width, renderer._swapchain->GetExtent().height};
         const auto viewportPost = vk::Viewport{viewArea.x, viewArea.w - viewArea.y, viewArea.z, -viewArea.w, 0.0f, 1.0f};
@@ -304,7 +328,6 @@ int main(int argc, char* argv[])
 
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipeline);
-        //commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipelineLayout, 0, 1, &groundMaterial->_descriptorSet, 0, nullptr);
         commandBuffer.pushConstants(groundMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
         vk::Buffer vertexBuffers[] = {level._floorMesh._vertexBuffer->Get()};
         vk::DeviceSize offsets[] = {0};
@@ -353,7 +376,18 @@ int main(int argc, char* argv[])
         commandBuffer.pushConstants(hudMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(HudPushConstants), &hudPushConstants);
         commandBuffer.draw(6, 1, 0, 0);
 
-        commandBuffer.endRenderPass();
+        commandBuffer.endRenderingKHR();
+
+        vk::ImageMemoryBarrier2KHR attachmentToPresentBarrier{};
+        attachmentToPresentBarrier.setImage(renderer._swapchain->GetImages()[imageIndex].first);
+        attachmentToPresentBarrier.setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+        attachmentToPresentBarrier.setOldLayout(vk::ImageLayout::eColorAttachmentOptimal);
+        attachmentToPresentBarrier.setNewLayout(vk::ImageLayout::ePresentSrcKHR);
+        attachmentToPresentBarrier.setSrcStageMask(vk::PipelineStageFlagBits2KHR::eColorAttachmentOutput);
+        attachmentToPresentBarrier.setDstStageMask(vk::PipelineStageFlagBits2KHR::eBottomOfPipe);
+        attachmentToPresentBarrier.setSrcAccessMask(vk::AccessFlagBits2KHR::eColorAttachmentWrite);
+        attachmentToPresentBarrier.setDstAccessMask({});
+        commandBuffer.pipelineBarrier2KHR(vk::DependencyInfoKHR{{}, 0, nullptr, 0, nullptr, 1, &attachmentToPresentBarrier});
 
         commandBuffer.end();
 
@@ -364,7 +398,11 @@ int main(int argc, char* argv[])
         const vk::SubmitInfo2KHR submitInfo{{}, 1, &waitSemaphore, 1, &cmdBufferSubmit, 1, &signalSemaphore};
 
         auto graphicsQueue = device->GetGraphicQueue();
-        graphicsQueue.submit2KHR(1, &submitInfo, renderFence);
+        auto submitResult = graphicsQueue.submit2KHR(1, &submitInfo, renderFence);
+        if (submitResult != vk::Result::eSuccess)
+        {
+            spdlog::warn("[Vulkan] submit2KHR: {}", vk::to_string(submitResult));
+        }
 
         auto sc = renderer._swapchain->Get();
         const vk::PresentInfoKHR presentInfo{1, &renderSemaphore, 1, &sc, &imageIndex};
