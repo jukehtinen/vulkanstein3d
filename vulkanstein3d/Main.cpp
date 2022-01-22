@@ -51,68 +51,60 @@ void CreateMaterials(std::shared_ptr<Rendering::Device> device, Game::Assets& as
                      std::shared_ptr<Rendering::Buffer> frameUbo, std::shared_ptr<Rendering::Buffer> storage)
 {
 
-    {
-        auto testPipeline = Rendering::PipelineBuilder::Builder()
-                                .SetDepthState(false, false)
-                                .SetRasterization(vk::CullModeFlagBits::eNone, vk::FrontFace::eCounterClockwise)
-                                .SetShaders("Shaders/mat_hud.vert.spv", "Shaders/mat_hud.frag.spv")
-                                .Build(device);
+    auto hudPipeline = Rendering::PipelineBuilder::Builder()
+                           .SetDepthState(false, false)
+                           .SetRasterization(vk::CullModeFlagBits::eNone, vk::FrontFace::eCounterClockwise)
+                           .SetShaders("Shaders/mat_hud.vert.spv", "Shaders/mat_hud.frag.spv")
+                           .Build(device);
 
-        assets.AddMaterial("mat_hud_loading", Rendering::MaterialBuilder::Builder()
-                                                  .SetPipeline(testPipeline)
-                                                  .SetTexture(0, assets.GetTexture("tex_gui_loading"))
-                                                  .Build(device));
-
-        assets.AddMaterial("mat_hud_intro", Rendering::MaterialBuilder::Builder()
-                                                .SetPipeline(testPipeline)
-                                                .SetTexture(0, assets.GetTexture("tex_gui_intro"))
-                                                .Build(device));
-
-        assets.AddMaterial("mat_hud_weapons", Rendering::MaterialBuilder::Builder()
-                                                  .SetPipeline(testPipeline)
-                                                  .SetTexture(0, assets.GetTexture("tex_gui_weapons"))
-                                                  .Build(device));
-
-        assets.AddMaterial("mat_hud_keys", Rendering::MaterialBuilder::Builder()
-                                               .SetPipeline(testPipeline)
-                                               .SetTexture(0, assets.GetTexture("tex_gui_keys"))
-                                               .Build(device));
-    }
-
-    {
-        auto testPipeline = Rendering::PipelineBuilder::Builder()
-                                .SetShaders("Shaders/mat_map.vert.spv", "Shaders/mat_map.frag.spv")
-                                .Build(device);
-
-        assets.AddMaterial("mat_map", Rendering::MaterialBuilder::Builder()
-                                          .SetPipeline(testPipeline)
-                                          .SetTexture(0, assets.GetTexture("tex_walls"))
-                                          .Build(device));
-    }
-
-    {
-        auto testPipeline = Rendering::PipelineBuilder::Builder()
-                                .SetShaders("Shaders/mat_sprite.vert.spv", "Shaders/mat_sprite.frag.spv")
-                                .SetBlend(true)
-                                .Build(device);
-
-        assets.AddMaterial("mat_sprites", Rendering::MaterialBuilder::Builder()
-                                              .SetPipeline(testPipeline)
-                                              .SetTexture(0, assets.GetTexture("tex_sprites"))
-                                              .SetBuffer(1, frameUbo)
-                                              .SetBuffer(2, storage)
+    assets.AddMaterial("mat_hud_loading", Rendering::MaterialBuilder::Builder()
+                                              .SetPipeline(hudPipeline)
+                                              .SetTexture(0, assets.GetTexture("tex_gui_loading"))
                                               .Build(device));
-    }
 
-    {
-        auto testPipeline2 = Rendering::PipelineBuilder::Builder()
-                                 .SetShaders("Shaders/mat_ground.vert.spv", "Shaders/mat_ground.frag.spv")
-                                 .Build(device);
+    assets.AddMaterial("mat_hud_intro", Rendering::MaterialBuilder::Builder()
+                                            .SetPipeline(hudPipeline)
+                                            .SetTexture(0, assets.GetTexture("tex_gui_intro"))
+                                            .Build(device));
 
-        assets.AddMaterial("mat_ground", Rendering::MaterialBuilder::Builder()
-                                             .SetPipeline(testPipeline2)
-                                             .Build(device));
-    }
+    assets.AddMaterial("mat_hud_weapons", Rendering::MaterialBuilder::Builder()
+                                              .SetPipeline(hudPipeline)
+                                              .SetTexture(0, assets.GetTexture("tex_gui_weapons"))
+                                              .Build(device));
+
+    assets.AddMaterial("mat_hud_keys", Rendering::MaterialBuilder::Builder()
+                                           .SetPipeline(hudPipeline)
+                                           .SetTexture(0, assets.GetTexture("tex_gui_keys"))
+                                           .Build(device));
+
+    auto mapPipeline = Rendering::PipelineBuilder::Builder()
+                           .SetShaders("Shaders/mat_map.vert.spv", "Shaders/mat_map.frag.spv")
+                           .Build(device);
+
+    assets.AddMaterial("mat_map", Rendering::MaterialBuilder::Builder()
+                                      .SetPipeline(mapPipeline)
+                                      .SetTexture(0, assets.GetTexture("tex_walls"))
+                                      .Build(device));
+
+    auto spritePipeline = Rendering::PipelineBuilder::Builder()
+                              .SetShaders("Shaders/mat_sprite.vert.spv", "Shaders/mat_sprite.frag.spv")
+                              .SetBlend(true)
+                              .Build(device);
+
+    assets.AddMaterial("mat_sprites", Rendering::MaterialBuilder::Builder()
+                                          .SetPipeline(spritePipeline)
+                                          .SetTexture(0, assets.GetTexture("tex_sprites"))
+                                          .SetBuffer(1, frameUbo)
+                                          .SetBuffer(2, storage)
+                                          .Build(device));
+
+    auto groundPipeline = Rendering::PipelineBuilder::Builder()
+                              .SetShaders("Shaders/mat_ground.vert.spv", "Shaders/mat_ground.frag.spv")
+                              .Build(device);
+
+    assets.AddMaterial("mat_ground", Rendering::MaterialBuilder::Builder()
+                                         .SetPipeline(groundPipeline)
+                                         .Build(device));
 }
 
 int main(int argc, char* argv[])
@@ -162,33 +154,12 @@ int main(int argc, char* argv[])
 
     auto device = renderer._device;
     auto dev = renderer._device->Get();
-    vk::Fence renderFence = dev.createFence({vk::FenceCreateFlagBits::eSignaled}).value;
-    vk::Semaphore presentSemaphore = dev.createSemaphore({}).value;
-    vk::Semaphore renderSemaphore = dev.createSemaphore({}).value;
 
-    auto commandPool = dev.createCommandPool({vk::CommandPoolCreateFlagBits::eResetCommandBuffer}).value;
-    auto commandBuffer = dev.allocateCommandBuffers({commandPool, vk::CommandBufferLevel::ePrimary, 1}).value.front();
-
-    bool recreateSwapchain = false;
     auto prevTime = std::chrono::high_resolution_clock::now();
     double totalTime{};
     while (!glfwWindowShouldClose(window->Get()))
     {
         glfwPollEvents();
-
-        if (recreateSwapchain)
-        {
-            device->Get().waitIdle();
-            if (!renderer._swapchain->RefreshSwapchain())
-            {
-                glfwWaitEvents();
-                continue;
-            }
-
-            recreateSwapchain = false;
-
-            renderer._depthTexture = Rendering::Texture::CreateDepthTexture(device, renderer._swapchain->GetExtent().width, renderer._swapchain->GetExtent().height);
-        }
 
         auto nowTime = std::chrono::high_resolution_clock::now();
         auto timeSpan = std::chrono::duration_cast<std::chrono::duration<double>>(nowTime - prevTime);
@@ -264,106 +235,51 @@ int main(int argc, char* argv[])
 
         frameConstsUbo->SetData((void*)&constsUbo, sizeof(FrameConstantsUBO));
 
-        dev.waitForFences(1, &renderFence, VK_TRUE, UINT64_MAX);
-        dev.resetFences(1, &renderFence);
-
-        uint32_t imageIndex = dev.acquireNextImageKHR(renderer._swapchain->Get(), UINT64_MAX, presentSemaphore).value;
-
-        commandBuffer.reset({});
-
-        commandBuffer.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
-        std::vector<vk::ImageMemoryBarrier2KHR> attachmentBarriers(2);
-        // Swapchain image -> eColorAttachmentOptimal
-        attachmentBarriers[0].setImage(renderer._swapchain->GetImages()[imageIndex].first);
-        attachmentBarriers[0].setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
-        attachmentBarriers[0].setOldLayout(vk::ImageLayout::eUndefined);
-        attachmentBarriers[0].setNewLayout(vk::ImageLayout::eColorAttachmentOptimal);
-        attachmentBarriers[0].setSrcStageMask(vk::PipelineStageFlagBits2KHR::eTopOfPipe);
-        attachmentBarriers[0].setDstStageMask(vk::PipelineStageFlagBits2KHR::eColorAttachmentOutput);
-        attachmentBarriers[0].setSrcAccessMask(vk::AccessFlagBits2KHR::eNone);
-        attachmentBarriers[0].setDstAccessMask(vk::AccessFlagBits2KHR::eColorAttachmentWrite);
-        // Depth image -> eColorAttachmentOptimal
-        attachmentBarriers[1].setImage(renderer._depthTexture->_image);
-        attachmentBarriers[1].setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1});
-        attachmentBarriers[1].setOldLayout(vk::ImageLayout::eUndefined);
-        attachmentBarriers[1].setNewLayout(vk::ImageLayout::eDepthAttachmentOptimal);
-        attachmentBarriers[1].setSrcStageMask(vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests);
-        attachmentBarriers[1].setDstStageMask(vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests);
-        attachmentBarriers[1].setSrcAccessMask(vk::AccessFlagBits2KHR::eNone);
-        attachmentBarriers[1].setDstAccessMask(vk::AccessFlagBits2KHR::eDepthStencilAttachmentWrite);
-        commandBuffer.pipelineBarrier2KHR(vk::DependencyInfoKHR{{}, {}, {}, attachmentBarriers});
-
-        vk::RenderingAttachmentInfoKHR colorAttachment{};
-        colorAttachment.setClearValue(vk::ClearValue{vk::ClearColorValue{std::array<float, 4>{0.22f, 0.22f, 0.22f, 1.0f}}});
-        colorAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
-        colorAttachment.setStoreOp(vk::AttachmentStoreOp::eStore);
-        colorAttachment.setResolveMode(vk::ResolveModeFlagBits::eNone);
-        colorAttachment.setImageLayout(vk::ImageLayout::eAttachmentOptimalKHR);
-        colorAttachment.setImageView(renderer._swapchain->GetImages()[imageIndex].second);
-
-        vk::RenderingAttachmentInfoKHR depthAttachment{};
-        depthAttachment.setClearValue(vk::ClearValue{vk::ClearDepthStencilValue{1.0f}});
-        depthAttachment.setLoadOp(vk::AttachmentLoadOp::eClear);
-        depthAttachment.setStoreOp(vk::AttachmentStoreOp::eDontCare);
-        depthAttachment.setResolveMode(vk::ResolveModeFlagBits::eNone);
-        depthAttachment.setImageLayout(vk::ImageLayout::eDepthAttachmentOptimal);
-        depthAttachment.setImageView(renderer._depthTexture->_imageView);
-
-        vk::RenderingInfoKHR renderingInfo{};
-        renderingInfo.setPColorAttachments(&colorAttachment);
-        renderingInfo.setColorAttachmentCount(1);
-        renderingInfo.setPDepthAttachment(&depthAttachment);
-        renderingInfo.setRenderArea(vk::Rect2D{{0, 0}, renderer._swapchain->GetExtent()});
-        renderingInfo.setLayerCount(1);
-
-        commandBuffer.beginRenderingKHR(renderingInfo);
-
-        const glm::vec4 viewArea{0.0f, 0.0f, renderer._swapchain->GetExtent().width, renderer._swapchain->GetExtent().height};
-        const auto viewportPost = vk::Viewport{viewArea.x, viewArea.w - viewArea.y, viewArea.z, -viewArea.w, 0.0f, 1.0f};
-        const auto scissor = vk::Rect2D{{0, 0}, renderer._swapchain->GetExtent()};
-
-        commandBuffer.setScissor(0, 1, &scissor);
-        commandBuffer.setViewport(0, 1, &viewportPost);
+        if (!renderer.Begin())
+        {
+            // Couldn't begin rendering (window hidden, swapchain borked, etc.), try again later.
+            glfwWaitEvents();
+            continue;
+        }
 
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipeline);
-        commandBuffer.pushConstants(groundMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
+        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipeline);
+        renderer._commandBuffer.pushConstants(groundMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
         vk::Buffer vertexBuffers[] = {level._floorMesh._vertexBuffer->Get()};
         vk::DeviceSize offsets[] = {0};
-        commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-        commandBuffer.bindIndexBuffer(level._floorMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
-        commandBuffer.drawIndexed(level._floorMesh._indexCount, 1, 0, 0, 0);
+        renderer._commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+        renderer._commandBuffer.bindIndexBuffer(level._floorMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
+        renderer._commandBuffer.drawIndexed(level._floorMesh._indexCount, 1, 0, 0, 0);
 
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f}) * glm::translate(glm::mat4{1.0f}, glm::vec3{0.5, 0.0f, 0.5f});
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
-        commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
+        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
+        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
+        renderer._commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
         vk::Buffer vertexBuffers2[] = {level._mapMesh._vertexBuffer->Get()};
-        commandBuffer.bindVertexBuffers(0, 1, vertexBuffers2, offsets);
-        commandBuffer.bindIndexBuffer(level._mapMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
-        commandBuffer.drawIndexed(level._mapMesh._indexCount, 1, 0, 0, 0);
+        renderer._commandBuffer.bindVertexBuffers(0, 1, vertexBuffers2, offsets);
+        renderer._commandBuffer.bindIndexBuffer(level._mapMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
+        renderer._commandBuffer.drawIndexed(level._mapMesh._indexCount, 1, 0, 0, 0);
 
         consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, playerTrans.position) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
-        commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
+        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
+        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
+        renderer._commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
         vk::Buffer vertexBuffers3[] = {cubeMesh._vertexBuffer->Get()};
-        commandBuffer.bindVertexBuffers(0, 1, vertexBuffers3, offsets);
-        commandBuffer.bindIndexBuffer(cubeMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
-        commandBuffer.drawIndexed(cubeMesh._indexCount, 1, 0, 0, 0);
+        renderer._commandBuffer.bindVertexBuffers(0, 1, vertexBuffers3, offsets);
+        renderer._commandBuffer.bindIndexBuffer(cubeMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
+        renderer._commandBuffer.drawIndexed(cubeMesh._indexCount, 1, 0, 0, 0);
 
         auto rendeables = registry.view<Game::Transform, Game::Renderable>();
         for (auto [entity, rtransform, rmesh] : rendeables.each())
         {
             consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, rtransform.position) * glm::scale(glm::mat4{1.0f}, rtransform.scale);
-            commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
-            commandBuffer.drawIndexed(cubeMesh._indexCount, 1, 0, 0, 0);
+            renderer._commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
+            renderer._commandBuffer.drawIndexed(cubeMesh._indexCount, 1, 0, 0, 0);
         }
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipeline);
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipelineLayout, 0, 1, &spriteMaterial->_descriptorSet, 0, nullptr);
-        commandBuffer.draw(6, spriteModelMats.size(), 0, 0);
+        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipeline);
+        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipelineLayout, 0, 1, &spriteMaterial->_descriptorSet, 0, nullptr);
+        renderer._commandBuffer.draw(6, spriteModelMats.size(), 0, 0);
 
         // Hud
         auto orthoMat = glm::ortho(0.0f, (float)renderer._swapchain->GetExtent().width, (float)renderer._swapchain->GetExtent().height, 0.0f);
@@ -371,55 +287,15 @@ int main(int argc, char* argv[])
         glm::vec2 weaponSize{48, 24};
         HudPushConstants hudPushConstants{orthoMat, weaponSize * 4.0f, {250.0f, 250.0f}, 1};
 
-        commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, hudMaterial->_pipeline->pipeline);
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, hudMaterial->_pipeline->pipelineLayout, 0, 1, &hudMaterial->_descriptorSet, 0, nullptr);
-        commandBuffer.pushConstants(hudMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(HudPushConstants), &hudPushConstants);
-        commandBuffer.draw(6, 1, 0, 0);
+        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, hudMaterial->_pipeline->pipeline);
+        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, hudMaterial->_pipeline->pipelineLayout, 0, 1, &hudMaterial->_descriptorSet, 0, nullptr);
+        renderer._commandBuffer.pushConstants(hudMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(HudPushConstants), &hudPushConstants);
+        renderer._commandBuffer.draw(6, 1, 0, 0);
 
-        commandBuffer.endRenderingKHR();
-
-        vk::ImageMemoryBarrier2KHR attachmentToPresentBarrier{};
-        attachmentToPresentBarrier.setImage(renderer._swapchain->GetImages()[imageIndex].first);
-        attachmentToPresentBarrier.setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
-        attachmentToPresentBarrier.setOldLayout(vk::ImageLayout::eColorAttachmentOptimal);
-        attachmentToPresentBarrier.setNewLayout(vk::ImageLayout::ePresentSrcKHR);
-        attachmentToPresentBarrier.setSrcStageMask(vk::PipelineStageFlagBits2KHR::eColorAttachmentOutput);
-        attachmentToPresentBarrier.setDstStageMask(vk::PipelineStageFlagBits2KHR::eBottomOfPipe);
-        attachmentToPresentBarrier.setSrcAccessMask(vk::AccessFlagBits2KHR::eColorAttachmentWrite);
-        attachmentToPresentBarrier.setDstAccessMask({});
-        commandBuffer.pipelineBarrier2KHR(vk::DependencyInfoKHR{{}, 0, nullptr, 0, nullptr, 1, &attachmentToPresentBarrier});
-
-        commandBuffer.end();
-
-        const vk::CommandBufferSubmitInfoKHR cmdBufferSubmit{commandBuffer};
-        const vk::SemaphoreSubmitInfoKHR waitSemaphore{presentSemaphore, 0, vk::PipelineStageFlagBits2KHR::eAllCommands, 0};
-        const vk::SemaphoreSubmitInfoKHR signalSemaphore{renderSemaphore, 0, vk::PipelineStageFlagBits2KHR::eAllCommands, 0};
-
-        const vk::SubmitInfo2KHR submitInfo{{}, 1, &waitSemaphore, 1, &cmdBufferSubmit, 1, &signalSemaphore};
-
-        auto graphicsQueue = device->GetGraphicQueue();
-        auto submitResult = graphicsQueue.submit2KHR(1, &submitInfo, renderFence);
-        if (submitResult != vk::Result::eSuccess)
-        {
-            spdlog::warn("[Vulkan] submit2KHR: {}", vk::to_string(submitResult));
-        }
-
-        auto sc = renderer._swapchain->Get();
-        const vk::PresentInfoKHR presentInfo{1, &renderSemaphore, 1, &sc, &imageIndex};
-        auto presentResult = graphicsQueue.presentKHR(presentInfo);
-        if (presentResult != vk::Result::eSuccess)
-        {
-            spdlog::warn("[Vulkan] presentKHR: {}", vk::to_string(presentResult));
-            recreateSwapchain = true;
-        }
+        renderer.End();
     }
 
     dev.waitIdle();
-
-    dev.destroyCommandPool(commandPool);
-    dev.destroySemaphore(renderSemaphore);
-    dev.destroySemaphore(presentSemaphore);
-    dev.destroyFence(renderFence);
 
     return 0;
 }

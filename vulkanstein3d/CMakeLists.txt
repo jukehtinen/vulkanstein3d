@@ -22,6 +22,7 @@ add_executable (vulkanstein3d
     "Rendering/Instance.cpp" 
     "Rendering/MaterialBuilder.cpp"
     "Rendering/PipelineBuilder.cpp"
+    "Rendering/Renderer.cpp"
     "Rendering/Swapchain.cpp"
     "Rendering/Texture.cpp"
     "Wolf3dLoaders/Loaders.cpp"
