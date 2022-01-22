@@ -152,9 +152,6 @@ int main(int argc, char* argv[])
     auto spriteMaterial = assets.GetMaterial("mat_sprites");
     auto hudMaterial = assets.GetMaterial("mat_hud_weapons");
 
-    auto device = renderer._device;
-    auto dev = renderer._device->Get();
-
     auto prevTime = std::chrono::high_resolution_clock::now();
     double totalTime{};
     while (!glfwWindowShouldClose(window->Get()))
@@ -242,60 +239,39 @@ int main(int argc, char* argv[])
             continue;
         }
 
-        consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
-        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, groundMaterial->_pipeline->pipeline);
-        renderer._commandBuffer.pushConstants(groundMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
-        vk::Buffer vertexBuffers[] = {level._floorMesh._vertexBuffer->Get()};
         vk::DeviceSize offsets[] = {0};
-        renderer._commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
-        renderer._commandBuffer.bindIndexBuffer(level._floorMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
-        renderer._commandBuffer.drawIndexed(level._floorMesh._indexCount, 1, 0, 0, 0);
 
+        // Draw map
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f}) * glm::translate(glm::mat4{1.0f}, glm::vec3{0.5, 0.0f, 0.5f});
-        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
-        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
-        renderer._commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
-        vk::Buffer vertexBuffers2[] = {level._mapMesh._vertexBuffer->Get()};
-        renderer._commandBuffer.bindVertexBuffers(0, 1, vertexBuffers2, offsets);
-        renderer._commandBuffer.bindIndexBuffer(level._mapMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
-        renderer._commandBuffer.drawIndexed(level._mapMesh._indexCount, 1, 0, 0, 0);
+        renderer.DrawMesh(level._mapMesh, mapMaterial, &consts, sizeof(FrameConstants));
 
+        // Draw floor
+        consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
+        renderer.DrawMesh(level._floorMesh, groundMaterial, &consts, sizeof(FrameConstants));
+
+        // Draw player
         consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, playerTrans.position) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
-        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipeline);
-        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, mapMaterial->_pipeline->pipelineLayout, 0, 1, &mapMaterial->_descriptorSet, 0, nullptr);
-        renderer._commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
-        vk::Buffer vertexBuffers3[] = {cubeMesh._vertexBuffer->Get()};
-        renderer._commandBuffer.bindVertexBuffers(0, 1, vertexBuffers3, offsets);
-        renderer._commandBuffer.bindIndexBuffer(cubeMesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
-        renderer._commandBuffer.drawIndexed(cubeMesh._indexCount, 1, 0, 0, 0);
+        renderer.DrawMesh(cubeMesh, mapMaterial, &consts, sizeof(FrameConstants));
 
+        // Draw doors
         auto rendeables = registry.view<Game::Transform, Game::Renderable>();
         for (auto [entity, rtransform, rmesh] : rendeables.each())
         {
             consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, rtransform.position) * glm::scale(glm::mat4{1.0f}, rtransform.scale);
-            renderer._commandBuffer.pushConstants(mapMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(FrameConstants), &consts);
-            renderer._commandBuffer.drawIndexed(cubeMesh._indexCount, 1, 0, 0, 0);
+            renderer.DrawMesh(cubeMesh, mapMaterial, &consts, sizeof(FrameConstants));
         }
 
-        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipeline);
-        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, spriteMaterial->_pipeline->pipelineLayout, 0, 1, &spriteMaterial->_descriptorSet, 0, nullptr);
-        renderer._commandBuffer.draw(6, spriteModelMats.size(), 0, 0);
+        // Draw sprites
+        renderer.Draw(6, (uint32_t)spriteModelMats.size(), spriteMaterial, nullptr, 0);
 
         // Hud
         auto orthoMat = glm::ortho(0.0f, (float)renderer._swapchain->GetExtent().width, (float)renderer._swapchain->GetExtent().height, 0.0f);
-
         glm::vec2 weaponSize{48, 24};
         HudPushConstants hudPushConstants{orthoMat, weaponSize * 4.0f, {250.0f, 250.0f}, 1};
-
-        renderer._commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, hudMaterial->_pipeline->pipeline);
-        renderer._commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, hudMaterial->_pipeline->pipelineLayout, 0, 1, &hudMaterial->_descriptorSet, 0, nullptr);
-        renderer._commandBuffer.pushConstants(hudMaterial->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(HudPushConstants), &hudPushConstants);
-        renderer._commandBuffer.draw(6, 1, 0, 0);
+        renderer.Draw(6, 1, hudMaterial, &hudPushConstants, sizeof(HudPushConstants));
 
         renderer.End();
     }
-
-    dev.waitIdle();
 
     return 0;
 }

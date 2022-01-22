@@ -25,7 +25,7 @@ Renderer::~Renderer()
 {
     auto dev = _device->Get();
 
-    dev.waitIdle();
+    auto idleResult = dev.waitIdle();
 
     dev.destroySemaphore(_renderSemaphore);
     dev.destroySemaphore(_presentSemaphore);
@@ -40,8 +40,8 @@ bool Renderer::Begin()
 
     if (_recreateSwapchain)
     {
-        dev.waitIdle();
-        if (!_swapchain->RefreshSwapchain())
+        auto idleResult = dev.waitIdle();
+        if (idleResult != vk::Result::eSuccess || !_swapchain->RefreshSwapchain())
         {
             return false;
         }
@@ -56,7 +56,11 @@ bool Renderer::Begin()
     _imageIndex = dev.acquireNextImageKHR(_swapchain->Get(), UINT64_MAX, _presentSemaphore).value;
 
     _commandBuffer.reset({});
-    _commandBuffer.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    auto beginResult = _commandBuffer.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    if (beginResult != vk::Result::eSuccess)
+    {
+        spdlog::warn("[Vulkan] begin: {}", vk::to_string(beginResult));
+    }
 
     // Swapchain image -> eColorAttachmentOptimal
     // Depth image -> eColorAttachmentOptimal
@@ -100,7 +104,11 @@ void Renderer::End()
     attachmentToPresentBarrier.setDstAccessMask({});
     _commandBuffer.pipelineBarrier2KHR(vk::DependencyInfoKHR{{}, 0, nullptr, 0, nullptr, 1, &attachmentToPresentBarrier});
 
-    _commandBuffer.end();
+    auto endResult = _commandBuffer.end();
+    if (endResult != vk::Result::eSuccess)
+    {
+        spdlog::warn("[Vulkan] begin: {}", vk::to_string(endResult));
+    }
 
     Submit();
 }
@@ -168,6 +176,38 @@ void Renderer::Submit()
         spdlog::warn("[Vulkan] presentKHR: {}", vk::to_string(presentResult));
         _recreateSwapchain = true;
     }
+}
+
+void Renderer::Draw(uint32_t vertexCount, uint32_t instances, std::shared_ptr<Rendering::Material> material, void* pushConstants, size_t pushConstantSize)
+{
+    _commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, material->_pipeline->pipeline);
+
+    if (material->_descriptorSet)
+        _commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, material->_pipeline->pipelineLayout, 0, 1, &material->_descriptorSet, 0, nullptr);
+
+    if (pushConstants)
+        _commandBuffer.pushConstants(material->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, (uint32_t)pushConstantSize, pushConstants);
+
+    _commandBuffer.draw(vertexCount, instances, 0, 0);
+}
+
+void Renderer::DrawMesh(Rendering::Mesh& mesh, std::shared_ptr<Rendering::Material> material, void* pushConstants, size_t pushConstantSize)
+{
+    vk::Buffer vertexBuffers[] = {mesh._vertexBuffer->Get()};
+    vk::DeviceSize offsets[] = {0};
+
+    _commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, material->_pipeline->pipeline);
+
+    if (material->_descriptorSet)
+        _commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, material->_pipeline->pipelineLayout, 0, 1, &material->_descriptorSet, 0, nullptr);
+
+    if (pushConstants)
+        _commandBuffer.pushConstants(material->_pipeline->pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, (uint32_t)pushConstantSize, pushConstants);
+
+    _commandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+    _commandBuffer.bindIndexBuffer(mesh._indexBuffer->Get(), 0, vk::IndexType::eUint32);
+
+    _commandBuffer.drawIndexed(mesh._indexCount, 1, 0, 0, 0);
 }
 
 } // namespace Rendering
