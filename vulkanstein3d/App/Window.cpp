@@ -24,6 +24,8 @@ Window::Window(int width, int height)
 
     glfwSetWindowSizeCallback(_window, [](GLFWwindow* wnd, int width, int height) {});
 
+    glfwSetInputMode(_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
     App::Input::The().Initialize(this);
 }
 

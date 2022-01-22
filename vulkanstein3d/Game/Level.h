@@ -2,6 +2,7 @@
 
 #include "../Rendering/Renderer.h"
 #include "Components.h"
+#include "Game/PlayerController.h"
 #include "MeshGenerator.h"
 
 #include "entt/entt.hpp"
@@ -37,6 +38,7 @@ class Level
 
     Rendering::Mesh _mapMesh;
     Rendering::Mesh _floorMesh;
+    Game::PlayerController _playerController;
 
   private:
     void CreatePlayerEntity(int index);
@@ -52,7 +54,6 @@ class Level
     std::vector<uint32_t> _tileMap;
 
     entt::registry _registry;
-
     entt::entity _player{entt::null};
 };
 } // namespace Game

@@ -11,4 +11,5 @@ layout(location = 0) out vec4 outColor;
 void main()
 {
     outColor = texture(textures, In.uvTile.xyz);
+    if (outColor.a < 0.9) discard;
 }

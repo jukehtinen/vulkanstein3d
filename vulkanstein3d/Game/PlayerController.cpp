@@ -10,8 +10,7 @@ const float MaxSpeed = 55.0f;
 const float Sensitivity = 0.1f;
 const float FOV = 45.0f;
 
-PlayerController::PlayerController(const glm::vec3& pos)
-    : _position(pos)
+PlayerController::PlayerController()
 {
     UpdateVectors();
 }
@@ -19,6 +18,8 @@ PlayerController::PlayerController(const glm::vec3& pos)
 void PlayerController::Update(float delta)
 {
     auto& input = App::Input::The();
+
+    const float ypos = _position.y;
 
     float velocity = MaxSpeed * delta;
     if (input.IsKeyDown(GLFW_KEY_W))
@@ -39,6 +40,30 @@ void PlayerController::Update(float delta)
         _position += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
     if (input.IsKeyDown(GLFW_KEY_C))
         _position += glm::vec3(0.0f, -1.0f, 0.0f) * velocity;
+
+    auto mousepos = input.GetMousePos();
+    if (_firstMouse && mousepos.x != 0 && mousepos.y != 0)
+    {
+        _lastX = mousepos.x;
+        _lastY = mousepos.y;
+        _firstMouse = false;
+    }
+
+    float xoffset = (mousepos.x - _lastX) * Sensitivity;
+    float yoffset = (_lastY - mousepos.y) * Sensitivity;
+
+    _lastX = mousepos.x;
+    _lastY = mousepos.y;
+
+    _yaw += xoffset;
+    _pitch += yoffset;
+
+    if (_pitch > 89.0f)
+        _pitch = 89.0f;
+    if (_pitch < -89.0f)
+        _pitch = -89.0f;
+
+    _position.y = ypos;    
 
     UpdateVectors();
 }

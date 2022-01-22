@@ -29,6 +29,6 @@ void main()
     pos.y = pc.scale.y * (0.5 - uv.y);
 	pos += pc.translate;
 
-    Out.uvTile = vec3(vec2(uv.x, 1 - uv.y), float(pc.textureIndex));
+    Out.uvTile = vec3(1.0 - vec2(uv.x, uv.y), float(pc.textureIndex));
     gl_Position = pc.vp * vec4(pos, 0, 1);
 }

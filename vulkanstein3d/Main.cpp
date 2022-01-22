@@ -7,7 +7,6 @@
 #include "Game/Intersection.h"
 #include "Game/Level.h"
 #include "Game/MeshGenerator.h"
-#include "Game/PlayerController.h"
 #include "Rendering/Renderer.h"
 #include "Wolf3dLoaders/Loaders.h"
 
@@ -77,6 +76,11 @@ void CreateMaterials(std::shared_ptr<Rendering::Device> device, Game::Assets& as
                                            .SetTexture(0, assets.GetTexture("tex_gui_keys"))
                                            .Build(device));
 
+    assets.AddMaterial("mat_hud_sprites", Rendering::MaterialBuilder::Builder()
+                                              .SetPipeline(hudPipeline)
+                                              .SetTexture(0, assets.GetTexture("tex_sprites"))
+                                              .Build(device));
+
     auto mapPipeline = Rendering::PipelineBuilder::Builder()
                            .SetShaders("Shaders/mat_map.vert.spv", "Shaders/mat_map.frag.spv")
                            .Build(device);
@@ -131,13 +135,6 @@ int main(int argc, char* argv[])
 
     auto& registry = level.GetRegistry();
 
-    auto& playert = registry.get<Game::Transform>(level.GetPlayerEntity());
-
-    Game::PlayerController player{playert.position};
-
-    playert.position.y = 5.5f;
-    float cubeAngleRad = 0.0f;
-
     auto cubeMesh = Game::MeshGenerator::BuildCubeMesh(renderer._device);
 
     std::vector<Sprite> spriteModelMats;
@@ -150,7 +147,7 @@ int main(int argc, char* argv[])
     auto groundMaterial = assets.GetMaterial("mat_ground");
     auto mapMaterial = assets.GetMaterial("mat_map");
     auto spriteMaterial = assets.GetMaterial("mat_sprites");
-    auto hudMaterial = assets.GetMaterial("mat_hud_weapons");
+    auto hudMaterial = assets.GetMaterial("mat_hud_sprites");
 
     auto prevTime = std::chrono::high_resolution_clock::now();
     double totalTime{};
@@ -164,7 +161,6 @@ int main(int argc, char* argv[])
         auto delta = timeSpan.count();
         totalTime += delta;
 
-        player.Update(static_cast<float>(delta));
         level.Update(delta);
 
         spriteModelMats.clear();
@@ -178,54 +174,12 @@ int main(int argc, char* argv[])
         }
         modelStorage->SetData((void*)spriteModelMats.data(), sizeof(Sprite) * spriteModelMats.size());
 
-        auto view = player.GetViewMatrix();
-        auto proj = glm::perspective(glm::radians(45.0f), renderer._swapchain->GetExtent().width / (float)renderer._swapchain->GetExtent().height, 0.1f, 1000.0f);
-
         auto& input = App::Input::The();
 
         auto mousepos = input.GetMousePos();
 
-        auto& playerTrans = registry.get<Game::Transform>(level.GetPlayerEntity());
-
-        glm::vec3 cubeDir{glm::cos(cubeAngleRad), 0.0f, glm::sin(cubeAngleRad)};
-        auto prevPos = playerTrans.position;
-        glm::vec3 newPos = playerTrans.position;
-        if (input.IsKeyDown(GLFW_KEY_UP))
-            newPos = playerTrans.position + cubeDir * (float)delta * 50.0f;
-        if (input.IsKeyDown(GLFW_KEY_DOWN))
-            newPos = playerTrans.position - cubeDir * (float)delta * 50.0f;
-        if (input.IsKeyDown(GLFW_KEY_LEFT))
-            cubeAngleRad -= (float)delta * 5.0f;
-        if (input.IsKeyDown(GLFW_KEY_RIGHT))
-            cubeAngleRad += (float)delta * 5.0f;
-
-        int tilex = (int)(newPos.x / 10.0f);
-        int tiley = (int)(newPos.z / 10.0f);
-
-        const auto& tiles = level.GetTiles();
-        playerTrans.position.x = newPos.x;
-        for (int y = tiley - 1; y < tiley + 2; y++)
-        {
-            for (int x = tilex - 1; x < tilex + 2; x++)
-            {
-                glm::vec4 rect{x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f};
-                if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({playerTrans.position.x, playerTrans.position.z}, 3.0f, rect))
-                    playerTrans.position.x = prevPos.x;
-            }
-        }
-        playerTrans.position.z = newPos.z;
-        for (int y = tiley - 1; y < tiley + 2; y++)
-        {
-            for (int x = tilex - 1; x < tilex + 2; x++)
-            {
-                glm::vec4 rect{x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f};
-                if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({playerTrans.position.x, playerTrans.position.z}, 3.0f, rect))
-                    playerTrans.position.z = prevPos.z;
-            }
-        }
-
-        if (input.IsKeyDown(GLFW_KEY_TAB))
-            view = glm::lookAt(playerTrans.position, playerTrans.position + cubeDir, {0.0f, 1.0f, 0.0f});
+        auto view = level._playerController.GetViewMatrix();
+        auto proj = glm::perspective(glm::radians(45.0f), renderer._swapchain->GetExtent().width / (float)renderer._swapchain->GetExtent().height, 0.1f, 1000.0f);
 
         FrameConstants consts{(float)totalTime, (float)mousepos.x / (float)renderer._swapchain->GetExtent().width, (float)mousepos.y / (float)renderer._swapchain->GetExtent().height, 0.0f};
         FrameConstantsUBO constsUbo{view, proj, (float)totalTime, (float)mousepos.x / (float)renderer._swapchain->GetExtent().width, (float)mousepos.y / (float)renderer._swapchain->GetExtent().height, 0.0f};
@@ -250,8 +204,8 @@ int main(int argc, char* argv[])
         renderer.DrawMesh(level._floorMesh, groundMaterial, &consts, sizeof(FrameConstants));
 
         // Draw player
-        consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, playerTrans.position) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
-        renderer.DrawMesh(cubeMesh, mapMaterial, &consts, sizeof(FrameConstants));
+        //consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, playerTrans.position) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
+        //renderer.DrawMesh(cubeMesh, mapMaterial, &consts, sizeof(FrameConstants));
 
         // Draw doors
         auto rendeables = registry.view<Game::Transform, Game::Renderable>();
@@ -266,8 +220,13 @@ int main(int argc, char* argv[])
 
         // Hud
         auto orthoMat = glm::ortho(0.0f, (float)renderer._swapchain->GetExtent().width, (float)renderer._swapchain->GetExtent().height, 0.0f);
-        glm::vec2 weaponSize{48, 24};
-        HudPushConstants hudPushConstants{orthoMat, weaponSize * 4.0f, {250.0f, 250.0f}, 1};
+
+        float screenHeight = renderer._swapchain->GetExtent().height;
+        float screenWidth = renderer._swapchain->GetExtent().width;
+        float size = screenWidth / 3.0f;
+
+        glm::vec2 weaponSize{ size, size };
+        HudPushConstants hudPushConstants{orthoMat, weaponSize, {screenWidth / 2.0f, screenHeight - size / 2.0f}, 421};
         renderer.Draw(6, 1, hudMaterial, &hudPushConstants, sizeof(HudPushConstants));
 
         renderer.End();

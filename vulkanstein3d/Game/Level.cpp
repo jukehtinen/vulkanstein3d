@@ -83,6 +83,11 @@ Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> 
 
         CreateSceneryEntity(i, objectId);
     }
+
+    auto& playert = _registry.get<Game::Transform>(GetPlayerEntity());
+    playert.position.y = 5.5f;
+
+    _playerController.SetPosition(playert.position);
 }
 
 glm::vec3 Level::IndexToPosition(int index, float height)
@@ -141,6 +146,37 @@ void Level::Update(double delta)
 {
     auto& playerTrans = _registry.get<Game::Transform>(_player);
     auto& playerComponent = _registry.get<Game::Player>(_player);
+    
+    auto prevPos = _playerController.GetPosition();
+    _playerController.Update((float)delta);
+    auto newPos = _playerController.GetPosition();
+    
+    int tilex = (int)(newPos.x / 10.0f);
+    int tiley = (int)(newPos.z / 10.0f);
+
+    const auto& tiles = GetTiles();
+    playerTrans.position.x = newPos.x;
+    for (int y = tiley - 1; y < tiley + 2; y++)
+    {
+        for (int x = tilex - 1; x < tilex + 2; x++)
+        {
+            glm::vec4 rect{ x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f };
+            if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({ playerTrans.position.x, playerTrans.position.z }, 3.0f, rect))
+                playerTrans.position.x = prevPos.x;
+        }
+    }
+    playerTrans.position.z = newPos.z;
+    for (int y = tiley - 1; y < tiley + 2; y++)
+    {
+        for (int x = tilex - 1; x < tilex + 2; x++)
+        {
+            glm::vec4 rect{ x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f };
+            if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({ playerTrans.position.x, playerTrans.position.z }, 3.0f, rect))
+                playerTrans.position.z = prevPos.z;
+        }
+    }
+    _playerController.SetPosition(playerTrans.position);
+
 
     std::vector<entt::entity> remove;
 
