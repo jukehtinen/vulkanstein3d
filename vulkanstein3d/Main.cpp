@@ -178,7 +178,10 @@ int main(int argc, char* argv[])
 
         auto mousepos = input.GetMousePos();
 
-        auto view = level._playerController.GetViewMatrix();
+        const auto& playerXform = registry.get<Game::Transform>(level.GetPlayerEntity());
+        const auto& fpsCamera = registry.get<Game::FPSCamera>(level.GetPlayerEntity());
+
+        auto view = glm::lookAt(playerXform.position, playerXform.position + fpsCamera.front, fpsCamera.up);
         auto proj = glm::perspective(glm::radians(45.0f), renderer._swapchain->GetExtent().width / (float)renderer._swapchain->GetExtent().height, 0.1f, 1000.0f);
 
         FrameConstants consts{(float)totalTime, (float)mousepos.x / (float)renderer._swapchain->GetExtent().width, (float)mousepos.y / (float)renderer._swapchain->GetExtent().height, 0.0f};
@@ -221,11 +224,11 @@ int main(int argc, char* argv[])
         // Hud
         auto orthoMat = glm::ortho(0.0f, (float)renderer._swapchain->GetExtent().width, (float)renderer._swapchain->GetExtent().height, 0.0f);
 
-        float screenHeight = renderer._swapchain->GetExtent().height;
-        float screenWidth = renderer._swapchain->GetExtent().width;
+        float screenHeight = (float)renderer._swapchain->GetExtent().height;
+        float screenWidth = (float)renderer._swapchain->GetExtent().width;
         float size = screenWidth / 3.0f;
 
-        glm::vec2 weaponSize{ size, size };
+        glm::vec2 weaponSize{size, size};
         HudPushConstants hudPushConstants{orthoMat, weaponSize, {screenWidth / 2.0f, screenHeight - size / 2.0f}, 421};
         renderer.Draw(6, 1, hudMaterial, &hudPushConstants, sizeof(HudPushConstants));
 

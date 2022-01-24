@@ -33,6 +33,21 @@ struct Player
     int ammo{0};
 };
 
+struct FPSCamera
+{
+    glm::vec3 front{0.0f, 0.0f, -1.0f};
+    glm::vec3 up{0.0f, 1.0f, 0.0f};
+    glm::vec3 right;
+    glm::vec3 worldUp{0.0f, 1.0f, 0.0f};
+
+    float yaw = 0.0f;
+    float pitch = 0.0f;
+
+    bool firstMouse{true};
+    float lastX{0.0f};
+    float lastY{0.0f};
+};
+
 struct Sprite
 {
     int spriteIndex{0};

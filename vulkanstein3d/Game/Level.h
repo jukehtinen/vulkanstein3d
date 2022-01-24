@@ -2,7 +2,6 @@
 
 #include "../Rendering/Renderer.h"
 #include "Components.h"
-#include "Game/PlayerController.h"
 #include "MeshGenerator.h"
 
 #include "entt/entt.hpp"
@@ -38,15 +37,19 @@ class Level
 
     Rendering::Mesh _mapMesh;
     Rendering::Mesh _floorMesh;
-    Game::PlayerController _playerController;
 
   private:
+    void CreateEntities();
     void CreatePlayerEntity(int index);
     void CreateItemEntity(int index);
     void CreateSceneryEntity(int index, int objectId);
     void CreateDoorEntity(int index, uint32_t flags);
 
     glm::vec3 IndexToPosition(int index, float height = 0.0f);
+
+    void UpdateInput(double delta);
+
+    bool IsCollision(const glm::vec3& pos);
 
   private:
     Rendering::Renderer& _renderer;

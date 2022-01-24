@@ -5,6 +5,7 @@
 #include "Level.h"
 #include "MeshGenerator.h"
 
+#include "../App/Input.h"
 #include "../Rendering/Device.h"
 #include "../Wolf3dLoaders/Loaders.h"
 
@@ -15,8 +16,6 @@ Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> 
 {
     _floorMesh = Game::MeshGenerator::BuildFloorPlaneMesh(renderer._device, map->width);
     _mapMesh = Game::MeshGenerator::BuildMapMesh(renderer._device, *map.get());
-
-    using namespace Wolf3dLoaders;
 
     _tileMap.resize(map->width * map->width);
     for (int i = 0; i < map->tiles[0].size(); i++)
@@ -31,25 +30,40 @@ Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> 
         _tileMap[i] = TileBlocksMovement | TileBlocksShooting;
     }
 
-    for (int i = 0; i < map->tiles[0].size(); i++)
+    CreateEntities();
+
+    auto& playerXform = _registry.get<Game::Transform>(GetPlayerEntity());
+    playerXform.position.y = 5.5f;
+}
+
+glm::vec3 Level::IndexToPosition(int index, float height)
+{
+    return glm::vec3{index % _map->width * 10.0f + 5.0f, height, index / _map->width * 10.0f + 5.0f};
+}
+
+void Level::CreateEntities()
+{
+    using namespace Wolf3dLoaders;
+
+    for (int i = 0; i < _map->tiles[0].size(); i++)
     {
-        if (map->tiles[0][i] == 90)
+        if (_map->tiles[0][i] == 90)
             CreateDoorEntity(i, DoorVertical);
-        if (map->tiles[0][i] == 91)
+        if (_map->tiles[0][i] == 91)
             CreateDoorEntity(i, 0);
-        if (map->tiles[0][i] == 92)
+        if (_map->tiles[0][i] == 92)
             CreateDoorEntity(i, DoorVertical | DoorGoldKey);
-        if (map->tiles[0][i] == 93)
+        if (_map->tiles[0][i] == 93)
             CreateDoorEntity(i, DoorGoldKey);
-        if (map->tiles[0][i] == 94)
+        if (_map->tiles[0][i] == 94)
             CreateDoorEntity(i, DoorVertical | DoorSilverKey);
-        if (map->tiles[0][i] == 95)
+        if (_map->tiles[0][i] == 95)
             CreateDoorEntity(i, DoorSilverKey);
     }
 
-    for (int i = 0; i < map->tiles[1].size(); i++)
+    for (int i = 0; i < _map->tiles[1].size(); i++)
     {
-        int objectId = map->tiles[1][i];
+        int objectId = _map->tiles[1][i];
         if (objectId == 0)
             continue;
 
@@ -83,16 +97,6 @@ Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> 
 
         CreateSceneryEntity(i, objectId);
     }
-
-    auto& playert = _registry.get<Game::Transform>(GetPlayerEntity());
-    playert.position.y = 5.5f;
-
-    _playerController.SetPosition(playert.position);
-}
-
-glm::vec3 Level::IndexToPosition(int index, float height)
-{
-    return glm::vec3{index % _map->width * 10.0f + 5.0f, height, index / _map->width * 10.0f + 5.0f};
 }
 
 void Level::CreatePlayerEntity(int index)
@@ -101,6 +105,7 @@ void Level::CreatePlayerEntity(int index)
 
     _player = _registry.create();
     _registry.emplace<Player>(_player);
+    _registry.emplace<FPSCamera>(_player);
     _registry.emplace<Transform>(_player, IndexToPosition(index, 35.0f));
 }
 
@@ -144,39 +149,10 @@ void Level::CreateDoorEntity(int index, uint32_t flags)
 
 void Level::Update(double delta)
 {
-    auto& playerTrans = _registry.get<Game::Transform>(_player);
+    auto& playerXform = _registry.get<Game::Transform>(_player);
     auto& playerComponent = _registry.get<Game::Player>(_player);
-    
-    auto prevPos = _playerController.GetPosition();
-    _playerController.Update((float)delta);
-    auto newPos = _playerController.GetPosition();
-    
-    int tilex = (int)(newPos.x / 10.0f);
-    int tiley = (int)(newPos.z / 10.0f);
 
-    const auto& tiles = GetTiles();
-    playerTrans.position.x = newPos.x;
-    for (int y = tiley - 1; y < tiley + 2; y++)
-    {
-        for (int x = tilex - 1; x < tilex + 2; x++)
-        {
-            glm::vec4 rect{ x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f };
-            if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({ playerTrans.position.x, playerTrans.position.z }, 3.0f, rect))
-                playerTrans.position.x = prevPos.x;
-        }
-    }
-    playerTrans.position.z = newPos.z;
-    for (int y = tiley - 1; y < tiley + 2; y++)
-    {
-        for (int x = tilex - 1; x < tilex + 2; x++)
-        {
-            glm::vec4 rect{ x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f };
-            if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({ playerTrans.position.x, playerTrans.position.z }, 3.0f, rect))
-                playerTrans.position.z = prevPos.z;
-        }
-    }
-    _playerController.SetPosition(playerTrans.position);
-
+    UpdateInput(delta);
 
     std::vector<entt::entity> remove;
 
@@ -184,7 +160,7 @@ void Level::Update(double delta)
     auto view = _registry.view<Game::Item, Game::Trigger, Game::Transform>();
     for (auto [entity, item, trigger, transform] : view.each())
     {
-        if (Game::Intersection::CircleCircleIntersect({transform.position.x, transform.position.z}, trigger.radius, {playerTrans.position.x, playerTrans.position.z}, 5.0f))
+        if (Game::Intersection::CircleCircleIntersect({transform.position.x, transform.position.z}, trigger.radius, {playerXform.position.x, playerXform.position.z}, 5.0f))
         {
             switch ((Wolf3dLoaders::MapObjects)item.type)
             {
@@ -238,6 +214,103 @@ void Level::Update(double delta)
     }
 
     _registry.destroy(remove.begin(), remove.end());
+}
+
+void Level::UpdateInput(double delta)
+{
+    const float MaxSpeedRun = 55.0f;
+    const float MaxSpeedWalk = 35.0f;
+    const float Sensitivity = 0.1f;
+
+    auto& playerXform = _registry.get<Game::Transform>(_player);
+    auto& fpsCamera = _registry.get<Game::FPSCamera>(_player);
+
+    glm::vec3 prevPos = playerXform.position;
+    glm::vec3 newPos = playerXform.position;
+
+    const float ypos = prevPos.y;
+
+    auto& input = App::Input::The();
+
+    float currentSpeed = MaxSpeedRun;
+    if (input.IsKeyDown(GLFW_KEY_LEFT_SHIFT) || input.IsKeyDown(GLFW_KEY_RIGHT_SHIFT))
+        currentSpeed = MaxSpeedWalk;
+
+    float velocity = currentSpeed * (float)delta;
+    if (input.IsKeyDown(GLFW_KEY_W))
+        newPos += fpsCamera.front * velocity;
+    if (input.IsKeyDown(GLFW_KEY_S))
+        newPos -= fpsCamera.front * velocity;
+    if (input.IsKeyDown(GLFW_KEY_A))
+        newPos -= fpsCamera.right * velocity;
+    if (input.IsKeyDown(GLFW_KEY_D))
+        newPos += fpsCamera.right * velocity;
+
+    if (input.IsKeyDown(GLFW_KEY_Q))
+        fpsCamera.yaw -= velocity * 20.0f;
+    if (input.IsKeyDown(GLFW_KEY_E))
+        fpsCamera.yaw += velocity * 20.0f;
+
+    if (input.IsKeyDown(GLFW_KEY_SPACE))
+        newPos += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
+    if (input.IsKeyDown(GLFW_KEY_C))
+        newPos += glm::vec3(0.0f, -1.0f, 0.0f) * velocity;
+
+    auto mousepos = input.GetMousePos();
+    if (fpsCamera.firstMouse && mousepos.x != 0 && mousepos.y != 0)
+    {
+        fpsCamera.lastX = (float)mousepos.x;
+        fpsCamera.lastY = (float)mousepos.y;
+        fpsCamera.firstMouse = false;
+    }
+
+    float xoffset = (mousepos.x - fpsCamera.lastX) * Sensitivity;
+    float yoffset = (fpsCamera.lastY - mousepos.y) * Sensitivity;
+
+    fpsCamera.lastX = (float)mousepos.x;
+    fpsCamera.lastY = (float)mousepos.y;
+
+    fpsCamera.yaw += xoffset;
+    fpsCamera.pitch += yoffset;
+
+    if (fpsCamera.pitch > 89.0f)
+        fpsCamera.pitch = 89.0f;
+    if (fpsCamera.pitch < -89.0f)
+        fpsCamera.pitch = -89.0f;
+
+    newPos.y = ypos;
+
+    glm::vec3 front{glm::cos(glm::radians(fpsCamera.yaw)) * glm::cos(glm::radians(fpsCamera.pitch)), glm::sin(glm::radians(fpsCamera.pitch)), glm::sin(glm::radians(fpsCamera.yaw)) * glm::cos(glm::radians(fpsCamera.pitch))};
+    fpsCamera.front = glm::normalize(front);
+    fpsCamera.right = glm::normalize(glm::cross(fpsCamera.front, fpsCamera.worldUp));
+    fpsCamera.up = glm::normalize(glm::cross(fpsCamera.right, fpsCamera.front));
+
+    playerXform.position.x = newPos.x;
+    if (IsCollision(playerXform.position))
+        playerXform.position.x = prevPos.x;
+
+    playerXform.position.z = newPos.z;
+    if (IsCollision(playerXform.position))
+        playerXform.position.z = prevPos.z;
+}
+
+bool Level::IsCollision(const glm::vec3& pos)
+{
+    int tilex = (int)(pos.x / 10.0f);
+    int tiley = (int)(pos.z / 10.0f);
+
+    const auto& tiles = GetTiles();
+    for (int y = tiley - 1; y < tiley + 2; y++)
+    {
+        for (int x = tilex - 1; x < tilex + 2; x++)
+        {
+            glm::vec4 rect{x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f};
+            if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({pos.x, pos.z}, 3.0f, rect))
+                return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace Game
