@@ -11,6 +11,9 @@
 
 namespace Game
 {
+constexpr float DoorMoveTime = 0.75f;
+constexpr float DoorStayOpenTime = 3.0f;
+
 Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map)
     : _renderer(renderer), _map(map)
 {
@@ -59,6 +62,8 @@ void Level::CreateEntities()
             CreateDoorEntity(i, DoorVertical | DoorSilverKey);
         if (_map->tiles[0][i] == 95)
             CreateDoorEntity(i, DoorSilverKey);
+        if (_map->tiles[0][i] == 100)
+            CreateDoorEntity(i, DoorVertical | DoorElevator);
     }
 
     for (int i = 0; i < _map->tiles[1].size(); i++)
@@ -142,9 +147,15 @@ void Level::CreateDoorEntity(int index, uint32_t flags)
 
     auto scale = (flags & Game::DoorVertical) ? glm::vec3{2.5f, 10.0f, 10.0f} : glm::vec3{10.0f, 10.0f, 2.5f};
 
+    int tileId = 98;
+    if ((flags & Game::DoorElevator))
+        tileId = 102;
+    else if ((flags & Game::DoorGoldKey) || (flags & Game::DoorSilverKey))
+        tileId = 104;
+
     _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f), scale);
-    _registry.emplace<Door>(entity, flags);
-    _registry.emplace<Renderable>(entity, 0);
+    _registry.emplace<Door>(entity, flags, tileId);
+    _registry.emplace<Collider>(entity, 5.0f);
 }
 
 void Level::Update(double delta)
@@ -153,6 +164,7 @@ void Level::Update(double delta)
     auto& playerComponent = _registry.get<Game::Player>(_player);
 
     UpdateInput(delta);
+    UpdateDoors(delta);
 
     std::vector<entt::entity> remove;
 
@@ -252,9 +264,7 @@ void Level::UpdateInput(double delta)
         fpsCamera.yaw += velocity * 20.0f;
 
     if (input.IsKeyDown(GLFW_KEY_SPACE))
-        newPos += glm::vec3(0.0f, 1.0f, 0.0f) * velocity;
-    if (input.IsKeyDown(GLFW_KEY_C))
-        newPos += glm::vec3(0.0f, -1.0f, 0.0f) * velocity;
+        Activate();
 
     auto mousepos = input.GetMousePos();
     if (fpsCamera.firstMouse && mousepos.x != 0 && mousepos.y != 0)
@@ -310,7 +320,103 @@ bool Level::IsCollision(const glm::vec3& pos)
         }
     }
 
+    auto colliderView = _registry.view<Game::Transform, Game::Collider>();
+    for (auto [entity, xform, collider] : colliderView.each())
+    {
+        int colliderTilex = (int)(xform.position.x / 10.0f);
+        int colliderTiley = (int)(xform.position.z / 10.0f);
+
+        glm::vec4 rect{colliderTilex * 10.0f + 5.0f, colliderTiley * 10.0f + 5.0f, 10.0f, 10.0f};
+        if (Game::Intersection::CircleRectIntersect({pos.x, pos.z}, 3.0f, rect))
+            return true;
+    }
+
     return false;
+}
+
+void Level::Activate()
+{
+    const auto& playerXform = _registry.get<Game::Transform>(GetPlayerEntity());
+    const auto& fpsCamera = _registry.get<Game::FPSCamera>(GetPlayerEntity());
+    const auto& player = _registry.get<Game::Player>(GetPlayerEntity());
+
+    const auto activatePosition = playerXform.position + (fpsCamera.front * 5.0f);
+    int activateTilex = (int)(activatePosition.x / 10.0f);
+    int activateTiley = (int)(activatePosition.z / 10.0f);
+
+    auto colliderView = _registry.view<Game::Transform, Game::Collider>();
+    for (auto [entity, xform, collider] : colliderView.each())
+    {
+        int colliderTilex = (int)(xform.position.x / 10.0f);
+        int colliderTiley = (int)(xform.position.z / 10.0f);
+        if (activateTilex == colliderTilex && activateTiley == colliderTiley)
+        {
+            auto doorComponent = _registry.try_get<Game::Door>(entity);
+            if (doorComponent != nullptr)
+            {
+                if (doorComponent->state == Door::State::Closed)
+                {
+                    if (doorComponent->flags & Game::DoorGoldKey && !player.hasGoldKey)
+                    {
+                        spdlog::info("You need the gold key.");
+                        return;
+                    }
+                    if (doorComponent->flags & Game::DoorSilverKey && !player.hasSilverKey)
+                    {
+                        spdlog::info("You need the silver key.");
+                        return;
+                    }
+
+                    auto vertical = (doorComponent->flags & Game::DoorVertical);
+                    doorComponent->state = Door::State::Opening;
+                    doorComponent->time = DoorMoveTime;
+                    doorComponent->doorClosedPos = xform.position;
+                    doorComponent->doorOpenPos = xform.position + (vertical ? glm::vec3{0.0f, 0.0f, 12.0f} : glm::vec3{12.0f, 0.0f, 0.0f});
+                    return;
+                }
+            }
+        }
+    }
+}
+
+void Level::UpdateDoors(double delta)
+{
+    auto doorView = _registry.view<Game::Transform, Game::Door>();
+    for (auto [entity, xform, door] : doorView.each())
+    {
+        door.time -= delta;
+
+        switch (door.state)
+        {
+        case Door::State::Opening: {
+            xform.position = glm::mix(door.doorClosedPos, door.doorOpenPos, (DoorMoveTime - door.time) / DoorMoveTime);
+            if (door.time <= 0.0f)
+            {
+                door.state = Door::State::Open;
+                door.time = DoorStayOpenTime;
+            }
+            break;
+        }
+        case Door::State::Open: {
+            if (door.time <= 0.0f)
+            {
+                door.state = Door::State::Closing;
+                door.time = DoorMoveTime;
+            }
+            break;
+        }
+        case Door::State::Closing: {
+            xform.position = glm::mix(door.doorOpenPos, door.doorClosedPos, (DoorMoveTime - door.time) / DoorMoveTime);
+            if (door.time <= 0.0f)
+            {
+                door.state = Door::State::Closed;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
 }
 
 } // namespace Game

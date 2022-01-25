@@ -7,17 +7,29 @@ constexpr uint32_t DoorSilverKey = 0x2;
 constexpr uint32_t DoorGoldKey = 0x4;
 constexpr uint32_t DoorElevator = 0x8;
 
+struct Collider
+{
+    float radius{0};
+};
+
 struct Door
 {
+    enum class State
+    {
+        Closed,
+        Opening,
+        Open,
+        Closing
+    };
     uint32_t flags{0};
+    int tileIndex{0};
+    Door::State state{State::Closed};
+    float time{0.0f};
+    glm::vec3 doorClosedPos{0.0f};
+    glm::vec3 doorOpenPos{0.0f};
 };
 
 struct Item
-{
-    int type{0};
-};
-
-struct Renderable
 {
     int type{0};
 };

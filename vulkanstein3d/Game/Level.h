@@ -48,8 +48,12 @@ class Level
     glm::vec3 IndexToPosition(int index, float height = 0.0f);
 
     void UpdateInput(double delta);
+    void UpdateDoors(double delta);
 
     bool IsCollision(const glm::vec3& pos);
+
+    void Activate();
+    void ActivateDoor(entt::entity doorEntity);
 
   private:
     Rendering::Renderer& _renderer;

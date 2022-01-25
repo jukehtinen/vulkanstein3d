@@ -21,6 +21,15 @@ struct HudPushConstants
     int textureIndex{0};
 };
 
+struct ObjectPushConstants
+{
+    glm::mat4 mvp{1.0f};
+    float tileIndex;
+    float padding0;
+    float padding1;
+    float padding2;
+};
+
 struct FrameConstants
 {
     float time;
@@ -90,6 +99,15 @@ void CreateMaterials(std::shared_ptr<Rendering::Device> device, Game::Assets& as
                                       .SetTexture(0, assets.GetTexture("tex_walls"))
                                       .Build(device));
 
+    auto objectPipeline = Rendering::PipelineBuilder::Builder()
+                              .SetShaders("Shaders/mat_object.vert.spv", "Shaders/mat_object.frag.spv")
+                              .Build(device);
+
+    assets.AddMaterial("mat_object", Rendering::MaterialBuilder::Builder()
+                                         .SetPipeline(objectPipeline)
+                                         .SetTexture(0, assets.GetTexture("tex_walls"))
+                                         .Build(device));
+
     auto spritePipeline = Rendering::PipelineBuilder::Builder()
                               .SetShaders("Shaders/mat_sprite.vert.spv", "Shaders/mat_sprite.frag.spv")
                               .SetBlend(true)
@@ -129,7 +147,7 @@ int main(int argc, char* argv[])
     Game::Assets assets{renderer._device, dataPath};
     Wolf3dLoaders::Loaders loaders{dataPath};
 
-    auto map = loaders.LoadMap(1, 1);
+    auto map = loaders.LoadMap(1, 2);
 
     Game::Level level{renderer, map};
 
@@ -148,6 +166,7 @@ int main(int argc, char* argv[])
     auto mapMaterial = assets.GetMaterial("mat_map");
     auto spriteMaterial = assets.GetMaterial("mat_sprites");
     auto hudMaterial = assets.GetMaterial("mat_hud_sprites");
+    auto objectMaterial = assets.GetMaterial("mat_object");
 
     auto prevTime = std::chrono::high_resolution_clock::now();
     double totalTime{};
@@ -211,11 +230,14 @@ int main(int argc, char* argv[])
         //renderer.DrawMesh(cubeMesh, mapMaterial, &consts, sizeof(FrameConstants));
 
         // Draw doors
-        auto rendeables = registry.view<Game::Transform, Game::Renderable>();
-        for (auto [entity, rtransform, rmesh] : rendeables.each())
+        auto rendeables = registry.view<Game::Transform, Game::Door>();
+        for (auto [entity, xform, door] : rendeables.each())
         {
-            consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, rtransform.position) * glm::scale(glm::mat4{1.0f}, rtransform.scale);
-            renderer.DrawMesh(cubeMesh, mapMaterial, &consts, sizeof(FrameConstants));
+            ObjectPushConstants opc{
+                proj * view * glm::translate(glm::mat4{1.0f}, xform.position) * glm::scale(glm::mat4{1.0f}, xform.scale),
+                door.tileIndex};
+
+            renderer.DrawMesh(cubeMesh, objectMaterial, &opc, sizeof(ObjectPushConstants));
         }
 
         // Draw sprites
