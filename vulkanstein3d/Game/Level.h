@@ -44,6 +44,7 @@ class Level
     void CreateItemEntity(int index);
     void CreateSceneryEntity(int index, int objectId);
     void CreateDoorEntity(int index, uint32_t flags);
+    void CreateSecretDoorEntity(int index);
 
     glm::vec3 IndexToPosition(int index, float height = 0.0f);
 

@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
     Game::Assets assets{renderer._device, dataPath};
     Wolf3dLoaders::Loaders loaders{dataPath};
 
-    auto map = loaders.LoadMap(1, 2);
+    auto map = loaders.LoadMap(1, 1);
 
     Game::Level level{renderer, map};
 
@@ -225,17 +225,13 @@ int main(int argc, char* argv[])
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
         renderer.DrawMesh(level._floorMesh, groundMaterial, &consts, sizeof(FrameConstants));
 
-        // Draw player
-        //consts.mvp = proj * view * glm::translate(glm::mat4{1.0f}, playerTrans.position) * glm::rotate(glm::mat4{1.0f}, -cubeAngleRad, {0.0f, 1.0f, 0.0f}) * glm::scale(glm::mat4{1.0f}, glm::vec3{3.0f, 10.0f, 3.0f});
-        //renderer.DrawMesh(cubeMesh, mapMaterial, &consts, sizeof(FrameConstants));
-
         // Draw doors
-        auto rendeables = registry.view<Game::Transform, Game::Door>();
-        for (auto [entity, xform, door] : rendeables.each())
+        auto rendeables = registry.view<Game::Transform, Game::Renderable>();
+        for (auto [entity, xform, renderable] : rendeables.each())
         {
             ObjectPushConstants opc{
                 proj * view * glm::translate(glm::mat4{1.0f}, xform.position) * glm::scale(glm::mat4{1.0f}, xform.scale),
-                door.tileIndex};
+                (float)renderable.tileIndex};
 
             renderer.DrawMesh(cubeMesh, objectMaterial, &opc, sizeof(ObjectPushConstants));
         }

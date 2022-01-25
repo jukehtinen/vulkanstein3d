@@ -13,6 +13,7 @@ namespace Game
 {
 constexpr float DoorMoveTime = 0.75f;
 constexpr float DoorStayOpenTime = 3.0f;
+constexpr float SecretDoorMoveTime = 2.0f;
 
 Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map)
     : _renderer(renderer), _map(map)
@@ -72,7 +73,14 @@ void Level::CreateEntities()
         if (objectId == 0)
             continue;
 
-        // Enemies and such
+        // Secret door
+        if (objectId == 98)
+        {
+            CreateSecretDoorEntity(i);
+            continue;
+        }
+
+        // Skip enemies and such for now
         if (objectId >= 90)
             continue;
 
@@ -154,8 +162,23 @@ void Level::CreateDoorEntity(int index, uint32_t flags)
         tileId = 104;
 
     _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f), scale);
-    _registry.emplace<Door>(entity, flags, tileId);
-    _registry.emplace<Collider>(entity, 5.0f);
+    _registry.emplace<Door>(entity, flags);
+    _registry.emplace<Collider>(entity);
+    _registry.emplace<Renderable>(entity, tileId);
+}
+
+void Level::CreateSecretDoorEntity(int index)
+{
+    const auto entity = _registry.create();
+
+    int tileId = _map->tiles[0][index] - 1;
+    tileId *= 2;
+    if (tileId % 2 != 0)
+        tileId++;
+    _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f), glm::vec3{10.0f});
+    _registry.emplace<SecretDoor>(entity);
+    _registry.emplace<Collider>(entity);
+    _registry.emplace<Renderable>(entity, tileId);
 }
 
 void Level::Update(double delta)
@@ -375,6 +398,29 @@ void Level::Activate()
                     return;
                 }
             }
+            auto secretDoorComponent = _registry.try_get<Game::SecretDoor>(entity);
+            if (secretDoorComponent != nullptr)
+            {
+                if (secretDoorComponent->state == SecretDoor::State::Closed)
+                {
+                    int playerTilex = (int)(playerXform.position.x / 10.0f);
+                    int playerTiley = (int)(playerXform.position.z / 10.0f);
+
+                    glm::vec3 openOffset;
+                    if (playerTilex == colliderTilex)
+                        openOffset = {0.0f, 0.0f, playerTiley > colliderTiley ? -20.0f : 20.0f};
+                    else if (playerTiley == colliderTiley)
+                        openOffset = {playerTilex > colliderTilex ? -20.0f : 20.0f, 0.0f, 0.0f};
+                    else
+                        return;
+
+                    secretDoorComponent->state = SecretDoor::State::Opening;
+                    secretDoorComponent->time = SecretDoorMoveTime;
+                    secretDoorComponent->doorClosedPos = xform.position;
+                    secretDoorComponent->doorOpenPos = xform.position + openOffset;
+                    return;
+                }
+            }
         }
     }
 }
@@ -411,6 +457,24 @@ void Level::UpdateDoors(double delta)
             {
                 door.state = Door::State::Closed;
             }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    auto secretDoorView = _registry.view<Game::Transform, Game::SecretDoor>();
+    for (auto [entity, xform, door] : secretDoorView.each())
+    {
+        door.time -= delta;
+
+        switch (door.state)
+        {
+        case SecretDoor::State::Opening: {
+            xform.position = glm::mix(door.doorClosedPos, door.doorOpenPos, (SecretDoorMoveTime - door.time) / SecretDoorMoveTime);
+            if (door.time <= 0.0f)
+                door.state = SecretDoor::State::Open;
             break;
         }
         default:

@@ -9,7 +9,7 @@ constexpr uint32_t DoorElevator = 0x8;
 
 struct Collider
 {
-    float radius{0};
+    int type{0};
 };
 
 struct Door
@@ -22,7 +22,6 @@ struct Door
         Closing
     };
     uint32_t flags{0};
-    int tileIndex{0};
     Door::State state{State::Closed};
     float time{0.0f};
     glm::vec3 doorClosedPos{0.0f};
@@ -43,6 +42,25 @@ struct Player
     int health{100};
     int score{0};
     int ammo{0};
+};
+
+struct Renderable
+{
+    int tileIndex{0};
+};
+
+struct SecretDoor
+{
+    enum class State
+    {
+        Closed,
+        Opening,
+        Open
+    };
+    SecretDoor::State state{State::Closed};
+    float time{0.0f};
+    glm::vec3 doorClosedPos{0.0f};
+    glm::vec3 doorOpenPos{0.0f};
 };
 
 struct FPSCamera
