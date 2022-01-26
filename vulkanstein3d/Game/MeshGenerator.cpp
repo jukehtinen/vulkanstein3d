@@ -134,6 +134,10 @@ Rendering::Mesh MeshGenerator::BuildMapMesh(std::shared_ptr<Rendering::Device> d
         if (map.tiles[1][i] == 98)
             continue;
 
+        // Handle elevator as an entity.
+        if (tileId == 21 && (map.tiles[0][i - 1] >= 90 || map.tiles[0][i + 1] >= 90))
+            continue;
+
         // Wolf has two images per tile (light and dark). Use only light version.
         tileId--;
         tileId *= 2;

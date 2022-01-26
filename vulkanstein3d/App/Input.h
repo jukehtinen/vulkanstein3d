@@ -13,8 +13,12 @@ class Input
 
     void Initialize(Window* window);
 
+    void Update();
+
     glm::ivec2 GetMousePos() const { return _mousePos; }
     bool IsKeyDown(int key) const { return _keys[key] == 1; }
+
+    bool IsButtonPressed(int button) const { return _buttons[button] == 1; }
 
   private:
     Input();
@@ -24,5 +28,6 @@ class Input
 
     glm::ivec2 _mousePos{};
     std::array<int, GLFW_KEY_LAST> _keys;
+    std::array<int, 4> _buttons;
 };
 } // namespace App

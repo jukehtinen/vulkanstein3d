@@ -25,6 +25,13 @@ constexpr uint32_t TileBlocksShooting = 0x2;
 class Level
 {
   public:
+    enum class LevelState
+    {
+        Playing,
+        GoToNextLevel,
+        GoToSecretLevel
+    };
+
     Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map);
 
     std::shared_ptr<Wolf3dLoaders::Map> GetMap() { return _map; }
@@ -35,6 +42,8 @@ class Level
 
     void Update(double delta);
 
+    LevelState GetState() { return _state; }
+
     Rendering::Mesh _mapMesh;
     Rendering::Mesh _floorMesh;
 
@@ -43,8 +52,9 @@ class Level
     void CreatePlayerEntity(int index);
     void CreateItemEntity(int index);
     void CreateSceneryEntity(int index, int objectId);
-    void CreateDoorEntity(int index, uint32_t flags);
+    void CreateDoorEntity(int index, uint32_t flags);    
     void CreateSecretDoorEntity(int index);
+    void CreateElevatorEntity(int index);
 
     glm::vec3 IndexToPosition(int index, float height = 0.0f);
 
@@ -63,5 +73,7 @@ class Level
 
     entt::registry _registry;
     entt::entity _player{entt::null};
+
+    LevelState _state{LevelState::Playing};
 };
 } // namespace Game

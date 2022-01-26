@@ -28,6 +28,17 @@ struct Door
     glm::vec3 doorOpenPos{0.0f};
 };
 
+struct Elevator
+{
+    enum class Type
+    {
+        Normal,
+        SecretLevel
+    };
+    Elevator::Type type{Type::Normal};
+    bool isActivated{false};
+};
+
 struct Item
 {
     int type{0};

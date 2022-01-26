@@ -147,11 +147,8 @@ int main(int argc, char* argv[])
     Game::Assets assets{renderer._device, dataPath};
     Wolf3dLoaders::Loaders loaders{dataPath};
 
-    auto map = loaders.LoadMap(1, 1);
-
-    Game::Level level{renderer, map};
-
-    auto& registry = level.GetRegistry();
+    int levelIndex = 0;
+    auto level = std::make_shared<Game::Level>(renderer, loaders.LoadMap((levelIndex / 10) + 1, (levelIndex % 10) + 1));
 
     auto cubeMesh = Game::MeshGenerator::BuildCubeMesh(renderer._device);
 
@@ -170,8 +167,10 @@ int main(int argc, char* argv[])
 
     auto prevTime = std::chrono::high_resolution_clock::now();
     double totalTime{};
+    auto& input = App::Input::The();
     while (!glfwWindowShouldClose(window->Get()))
     {
+        input.Update();
         glfwPollEvents();
 
         auto nowTime = std::chrono::high_resolution_clock::now();
@@ -180,7 +179,22 @@ int main(int argc, char* argv[])
         auto delta = timeSpan.count();
         totalTime += delta;
 
-        level.Update(delta);
+        level->Update(delta);
+
+        if (level->GetState() == Game::Level::LevelState::GoToNextLevel)
+        {
+            // todo, handle return from secret level (to back to proper level order)
+            levelIndex++;
+            level = std::make_shared<Game::Level>(renderer, loaders.LoadMap((levelIndex / 10) + 1, (levelIndex % 10) + 1));
+            continue;
+        }
+        if (level->GetState() == Game::Level::LevelState::GoToSecretLevel)
+        {
+            level = std::make_shared<Game::Level>(renderer, loaders.LoadMap((levelIndex / 10) + 1, 10));
+            continue;
+        }
+
+        auto& registry = level->GetRegistry();
 
         spriteModelMats.clear();
         auto itemview = registry.view<Game::Transform, Game::Sprite>();
@@ -193,12 +207,10 @@ int main(int argc, char* argv[])
         }
         modelStorage->SetData((void*)spriteModelMats.data(), sizeof(Sprite) * spriteModelMats.size());
 
-        auto& input = App::Input::The();
-
         auto mousepos = input.GetMousePos();
 
-        const auto& playerXform = registry.get<Game::Transform>(level.GetPlayerEntity());
-        const auto& fpsCamera = registry.get<Game::FPSCamera>(level.GetPlayerEntity());
+        const auto& playerXform = registry.get<Game::Transform>(level->GetPlayerEntity());
+        const auto& fpsCamera = registry.get<Game::FPSCamera>(level->GetPlayerEntity());
 
         auto view = glm::lookAt(playerXform.position, playerXform.position + fpsCamera.front, fpsCamera.up);
         auto proj = glm::perspective(glm::radians(45.0f), renderer._swapchain->GetExtent().width / (float)renderer._swapchain->GetExtent().height, 0.1f, 1000.0f);
@@ -219,11 +231,11 @@ int main(int argc, char* argv[])
 
         // Draw map
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f}) * glm::translate(glm::mat4{1.0f}, glm::vec3{0.5, 0.0f, 0.5f});
-        renderer.DrawMesh(level._mapMesh, mapMaterial, &consts, sizeof(FrameConstants));
+        renderer.DrawMesh(level->_mapMesh, mapMaterial, &consts, sizeof(FrameConstants));
 
         // Draw floor
         consts.mvp = proj * view * glm::scale(glm::mat4{1.0f}, glm::vec3{10.0f});
-        renderer.DrawMesh(level._floorMesh, groundMaterial, &consts, sizeof(FrameConstants));
+        renderer.DrawMesh(level->_floorMesh, groundMaterial, &consts, sizeof(FrameConstants));
 
         // Draw doors
         auto rendeables = registry.view<Game::Transform, Game::Renderable>();

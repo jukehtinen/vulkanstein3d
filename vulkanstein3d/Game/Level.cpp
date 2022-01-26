@@ -15,6 +15,10 @@ constexpr float DoorMoveTime = 0.75f;
 constexpr float DoorStayOpenTime = 3.0f;
 constexpr float SecretDoorMoveTime = 2.0f;
 
+constexpr int TileElevatorSwitchOff = 41;
+constexpr int TileElevatorSwitchOn = 43;
+constexpr int TileElevatorToSecretFloor = 107;
+
 Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map)
     : _renderer(renderer), _map(map)
 {
@@ -29,6 +33,10 @@ Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> 
 
         // Secret doors
         if (map->tiles[1][i] == 98)
+            continue;
+
+        // Elevator
+        if (map->tiles[0][i] == 21 && (map->tiles[0][i - 1] >= 90 || map->tiles[0][i + 1] >= 90))
             continue;
 
         _tileMap[i] = TileBlocksMovement | TileBlocksShooting;
@@ -51,6 +59,8 @@ void Level::CreateEntities()
 
     for (int i = 0; i < _map->tiles[0].size(); i++)
     {
+        if (_map->tiles[0][i] == 21 && (_map->tiles[0][i - 1] >= 90 || _map->tiles[0][i + 1] >= 90))
+            CreateElevatorEntity(i);
         if (_map->tiles[0][i] == 90)
             CreateDoorEntity(i, DoorVertical);
         if (_map->tiles[0][i] == 91)
@@ -181,6 +191,18 @@ void Level::CreateSecretDoorEntity(int index)
     _registry.emplace<Renderable>(entity, tileId);
 }
 
+void Level::CreateElevatorEntity(int index)
+{
+    const auto entity = _registry.create();
+
+    bool isSecret = _map->tiles[0][index - 1] == TileElevatorToSecretFloor || _map->tiles[0][index + 1] == TileElevatorToSecretFloor;
+
+    _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f), glm::vec3{10.0f});
+    _registry.emplace<Elevator>(entity, isSecret ? Elevator::Type::SecretLevel : Elevator::Type::Normal);
+    _registry.emplace<Collider>(entity);
+    _registry.emplace<Renderable>(entity, TileElevatorSwitchOff);
+}
+
 void Level::Update(double delta)
 {
     auto& playerXform = _registry.get<Game::Transform>(_player);
@@ -286,8 +308,11 @@ void Level::UpdateInput(double delta)
     if (input.IsKeyDown(GLFW_KEY_E))
         fpsCamera.yaw += velocity * 20.0f;
 
-    if (input.IsKeyDown(GLFW_KEY_SPACE))
+    if (input.IsButtonPressed(0))
         Activate();
+
+    if (input.IsButtonPressed(1))
+        _state = LevelState::GoToNextLevel;
 
     auto mousepos = input.GetMousePos();
     if (fpsCamera.firstMouse && mousepos.x != 0 && mousepos.y != 0)
@@ -363,7 +388,7 @@ void Level::Activate()
     const auto& fpsCamera = _registry.get<Game::FPSCamera>(GetPlayerEntity());
     const auto& player = _registry.get<Game::Player>(GetPlayerEntity());
 
-    const auto activatePosition = playerXform.position + (fpsCamera.front * 5.0f);
+    const auto activatePosition = playerXform.position + (fpsCamera.front * 7.5f);
     int activateTilex = (int)(activatePosition.x / 10.0f);
     int activateTiley = (int)(activatePosition.z / 10.0f);
 
@@ -420,6 +445,15 @@ void Level::Activate()
                     secretDoorComponent->doorOpenPos = xform.position + openOffset;
                     return;
                 }
+            }
+            auto elevatorComponent = _registry.try_get<Game::Elevator>(entity);
+            if (elevatorComponent != nullptr)
+            {
+                auto rendeableComponent = _registry.try_get<Game::Renderable>(entity);
+                elevatorComponent->isActivated = !elevatorComponent->isActivated;
+                rendeableComponent->tileIndex = elevatorComponent->isActivated ? TileElevatorSwitchOn : TileElevatorSwitchOff;
+
+                _state = elevatorComponent->type == Elevator::Type::Normal ? LevelState::GoToNextLevel : LevelState::GoToSecretLevel;
             }
         }
     }

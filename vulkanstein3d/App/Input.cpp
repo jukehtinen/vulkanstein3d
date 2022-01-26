@@ -20,9 +20,20 @@ void Input::Initialize(Window* window)
     });
 }
 
+void Input::Update()
+{
+    for (int i = 0; i < _buttons.size(); i++)
+        _buttons[i] = 0;
+}
+
 void Input::SetKey(int key, int scancode, int action, int mods)
 {
     _keys[key] = action == GLFW_RELEASE ? 0 : 1;
+
+    if (key == GLFW_KEY_SPACE)
+        _buttons[0] = action == GLFW_PRESS ? 1 : 0;
+    if (key == GLFW_KEY_N)
+        _buttons[1] = action == GLFW_PRESS ? 1 : 0;
 }
 
 Input& Input::The()
