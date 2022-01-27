@@ -32,6 +32,23 @@ class Level
         GoToSecretLevel
     };
 
+    enum class Weapon
+    {
+        Knife,
+        Pistol,
+        MachineGun,
+        Gatling
+    };
+
+    enum class WeaponState
+    {
+        Ready,
+        Firing,
+        SemiAuto,
+        ChangingDown,
+        ChangingUp
+    };
+
     Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map);
 
     std::shared_ptr<Wolf3dLoaders::Map> GetMap() { return _map; }
@@ -47,12 +64,16 @@ class Level
     Rendering::Mesh _mapMesh;
     Rendering::Mesh _floorMesh;
 
+    Weapon _currentWeapon{Weapon::Pistol};
+    float _weaponChangeOffset{0.0f};
+    int _weaponFrameOffset{0};
+
   private:
     void CreateEntities();
-    void CreatePlayerEntity(int index);
+    void CreatePlayerEntity(int index, int objectId);
     void CreateItemEntity(int index);
     void CreateSceneryEntity(int index, int objectId);
-    void CreateDoorEntity(int index, uint32_t flags);    
+    void CreateDoorEntity(int index, uint32_t flags);
     void CreateSecretDoorEntity(int index);
     void CreateElevatorEntity(int index);
 
@@ -60,6 +81,7 @@ class Level
 
     void UpdateInput(double delta);
     void UpdateDoors(double delta);
+    void UpdateWeapon(double delta);
 
     bool IsCollision(const glm::vec3& pos);
 
@@ -75,5 +97,8 @@ class Level
     entt::entity _player{entt::null};
 
     LevelState _state{LevelState::Playing};
+    WeaponState _weaponState{WeaponState::Ready};
+    Weapon _nextWeapon{Weapon::Pistol};
+    float _weaponChangeTimer{0.0f};
 };
 } // namespace Game

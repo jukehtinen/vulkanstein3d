@@ -14,10 +14,16 @@ namespace Game
 constexpr float DoorMoveTime = 0.75f;
 constexpr float DoorStayOpenTime = 3.0f;
 constexpr float SecretDoorMoveTime = 2.0f;
+constexpr float WeaponChangeTime = 0.2f;
 
 constexpr int TileElevatorSwitchOff = 41;
 constexpr int TileElevatorSwitchOn = 43;
 constexpr int TileElevatorToSecretFloor = 107;
+
+glm::ivec2 GetTile(const glm::vec3& worldPos)
+{
+    return {(int)(worldPos.x / 10.0f), (int)(worldPos.z / 10.0f)};
+}
 
 Level::Level(Rendering::Renderer& renderer, std::shared_ptr<Wolf3dLoaders::Map> map)
     : _renderer(renderer), _map(map)
@@ -100,7 +106,7 @@ void Level::CreateEntities()
         case MapObjects::PlayerEast:
         case MapObjects::PlayerSouth:
         case MapObjects::PlayerWest:
-            CreatePlayerEntity(i);
+            CreatePlayerEntity(i, objectId);
             continue;
         case MapObjects::GoldKey:
         case MapObjects::SilverKey:
@@ -122,14 +128,22 @@ void Level::CreateEntities()
     }
 }
 
-void Level::CreatePlayerEntity(int index)
+void Level::CreatePlayerEntity(int index, int objectId)
 {
     assert(_player == entt::null);
 
     _player = _registry.create();
     _registry.emplace<Player>(_player);
-    _registry.emplace<FPSCamera>(_player);
     _registry.emplace<Transform>(_player, IndexToPosition(index, 35.0f));
+    auto& fpsCamera = _registry.emplace<FPSCamera>(_player);
+    if (objectId == 19)
+        fpsCamera.yaw = 270;
+    if (objectId == 20)
+        fpsCamera.yaw = 0;
+    if (objectId == 21)
+        fpsCamera.yaw = 90;
+    if (objectId == 22)
+        fpsCamera.yaw = 180;
 }
 
 void Level::CreateItemEntity(int index)
@@ -210,6 +224,7 @@ void Level::Update(double delta)
 
     UpdateInput(delta);
     UpdateDoors(delta);
+    UpdateWeapon(delta);
 
     std::vector<entt::entity> remove;
 
@@ -302,16 +317,9 @@ void Level::UpdateInput(double delta)
         newPos -= fpsCamera.right * velocity;
     if (input.IsKeyDown(GLFW_KEY_D))
         newPos += fpsCamera.right * velocity;
-
-    if (input.IsKeyDown(GLFW_KEY_Q))
-        fpsCamera.yaw -= velocity * 20.0f;
-    if (input.IsKeyDown(GLFW_KEY_E))
-        fpsCamera.yaw += velocity * 20.0f;
-
-    if (input.IsButtonPressed(0))
+    if (input.IsButtonTapped(0))
         Activate();
-
-    if (input.IsButtonPressed(1))
+    if (input.IsButtonTapped(1))
         _state = LevelState::GoToNextLevel;
 
     auto mousepos = input.GetMousePos();
@@ -354,13 +362,12 @@ void Level::UpdateInput(double delta)
 
 bool Level::IsCollision(const glm::vec3& pos)
 {
-    int tilex = (int)(pos.x / 10.0f);
-    int tiley = (int)(pos.z / 10.0f);
+    const auto tile = GetTile(pos);
 
     const auto& tiles = GetTiles();
-    for (int y = tiley - 1; y < tiley + 2; y++)
+    for (int y = tile.y - 1; y < tile.y + 2; y++)
     {
-        for (int x = tilex - 1; x < tilex + 2; x++)
+        for (int x = tile.x - 1; x < tile.x + 2; x++)
         {
             glm::vec4 rect{x * 10.0f + 5.0f, y * 10.0f + 5.0f, 10.0f, 10.0f};
             if ((tiles[y * 64 + x] & Game::TileBlocksMovement) && Game::Intersection::CircleRectIntersect({pos.x, pos.z}, 3.0f, rect))
@@ -371,10 +378,9 @@ bool Level::IsCollision(const glm::vec3& pos)
     auto colliderView = _registry.view<Game::Transform, Game::Collider>();
     for (auto [entity, xform, collider] : colliderView.each())
     {
-        int colliderTilex = (int)(xform.position.x / 10.0f);
-        int colliderTiley = (int)(xform.position.z / 10.0f);
+        const auto colliderTile = GetTile(xform.position);
 
-        glm::vec4 rect{colliderTilex * 10.0f + 5.0f, colliderTiley * 10.0f + 5.0f, 10.0f, 10.0f};
+        glm::vec4 rect{colliderTile.x * 10.0f + 5.0f, colliderTile.y * 10.0f + 5.0f, 10.0f, 10.0f};
         if (Game::Intersection::CircleRectIntersect({pos.x, pos.z}, 3.0f, rect))
             return true;
     }
@@ -389,15 +395,13 @@ void Level::Activate()
     const auto& player = _registry.get<Game::Player>(GetPlayerEntity());
 
     const auto activatePosition = playerXform.position + (fpsCamera.front * 7.5f);
-    int activateTilex = (int)(activatePosition.x / 10.0f);
-    int activateTiley = (int)(activatePosition.z / 10.0f);
+    const auto activateTile = GetTile(activatePosition);
 
     auto colliderView = _registry.view<Game::Transform, Game::Collider>();
     for (auto [entity, xform, collider] : colliderView.each())
     {
-        int colliderTilex = (int)(xform.position.x / 10.0f);
-        int colliderTiley = (int)(xform.position.z / 10.0f);
-        if (activateTilex == colliderTilex && activateTiley == colliderTiley)
+        const auto colliderTile = GetTile(xform.position);
+        if (activateTile == colliderTile)
         {
             auto doorComponent = _registry.try_get<Game::Door>(entity);
             if (doorComponent != nullptr)
@@ -428,14 +432,13 @@ void Level::Activate()
             {
                 if (secretDoorComponent->state == SecretDoor::State::Closed)
                 {
-                    int playerTilex = (int)(playerXform.position.x / 10.0f);
-                    int playerTiley = (int)(playerXform.position.z / 10.0f);
+                    const auto playerTile = GetTile(playerXform.position);
 
                     glm::vec3 openOffset;
-                    if (playerTilex == colliderTilex)
-                        openOffset = {0.0f, 0.0f, playerTiley > colliderTiley ? -20.0f : 20.0f};
-                    else if (playerTiley == colliderTiley)
-                        openOffset = {playerTilex > colliderTilex ? -20.0f : 20.0f, 0.0f, 0.0f};
+                    if (playerTile.x == colliderTile.x)
+                        openOffset = {0.0f, 0.0f, playerTile.y > colliderTile.y ? -20.0f : 20.0f};
+                    else if (playerTile.y == colliderTile.y)
+                        openOffset = {playerTile.x > colliderTile.x ? -20.0f : 20.0f, 0.0f, 0.0f};
                     else
                         return;
 
@@ -480,6 +483,14 @@ void Level::UpdateDoors(double delta)
         case Door::State::Open: {
             if (door.time <= 0.0f)
             {
+                // Don't close if player is still standing nearby.
+                const auto& playerXform = _registry.get<Game::Transform>(GetPlayerEntity());
+                if (glm::distance(playerXform.position, door.doorClosedPos) < 10.0f)
+                {
+                    door.time = DoorStayOpenTime;
+                    break;
+                }
+
                 door.state = Door::State::Closing;
                 door.time = DoorMoveTime;
             }
@@ -517,4 +528,113 @@ void Level::UpdateDoors(double delta)
     }
 }
 
+void Level::UpdateWeapon(double delta)
+{
+    auto& input = App::Input::The();
+
+    auto& player = _registry.get<Game::Player>(GetPlayerEntity());
+
+    auto changeWeapon = [&](Weapon w) {
+        if (_weaponState != WeaponState::Ready)
+            return;
+
+        _weaponChangeTimer = 0.0f;
+        _nextWeapon = w;
+        _weaponState = WeaponState::ChangingDown;
+    };
+
+    if (input.IsKeyDown(GLFW_KEY_1))
+        changeWeapon(Weapon::Knife);
+    if (input.IsKeyDown(GLFW_KEY_2))
+        changeWeapon(Weapon::Pistol);
+    if (input.IsKeyDown(GLFW_KEY_3))
+        changeWeapon(Weapon::MachineGun);
+    if (input.IsKeyDown(GLFW_KEY_4))
+        changeWeapon(Weapon::Gatling);
+
+    if (input.IsButtonDown(2))
+    {
+        if (_weaponState == WeaponState::Ready)
+        {
+            if (_currentWeapon == Weapon::Knife || player.ammo > 0)
+            {
+                _weaponState = WeaponState::Firing;
+                _weaponFrameOffset = 0;
+                _weaponChangeTimer = 0.0f;
+            }
+        }
+        if (player.ammo == 0)
+            changeWeapon(Weapon::Knife);
+    }
+    else
+    {
+        if (_weaponState == WeaponState::SemiAuto)
+            _weaponState = WeaponState::Ready;
+    }
+
+    if (_weaponState == WeaponState::Firing)
+    {
+        _weaponChangeTimer += (float)delta;
+        if (_weaponChangeTimer >= 0.075f)
+        {
+            _weaponFrameOffset++;
+            _weaponChangeTimer = 0.0f;
+
+            if (_weaponFrameOffset == 3)
+            {
+                if (_currentWeapon != Weapon::Knife)
+                    player.ammo--;
+                
+                spdlog::info("Ammo: {}", player.ammo);
+            }
+        }
+
+        if (_currentWeapon == Weapon::Knife || _currentWeapon == Weapon::Pistol)
+        {
+            if (_weaponFrameOffset >= 5)
+            {
+                _weaponState = WeaponState::SemiAuto;
+                _weaponFrameOffset = 0;
+            }
+        }
+        else
+        {
+            if (input.IsButtonDown(2) && player.ammo > 0)
+            {
+                if (_weaponFrameOffset >= 4)
+                    _weaponFrameOffset = 2;
+            }
+            else
+            {
+                if (_weaponFrameOffset >= 5)
+                {
+                    _weaponState = WeaponState::Ready;
+                    _weaponFrameOffset = 0;
+                }
+            }
+        }
+    }
+
+    if (_weaponState == WeaponState::ChangingDown)
+    {
+        _weaponChangeTimer += (float)delta;
+        _weaponChangeOffset = glm::clamp(1.0f - glm::pow(1.0f - (_weaponChangeTimer / WeaponChangeTime), 5.0f), 0.0f, 1.0f);
+        if (_weaponChangeTimer >= WeaponChangeTime)
+        {
+            _weaponChangeTimer = 0.0f;
+            _weaponState = WeaponState::ChangingUp;
+            _currentWeapon = _nextWeapon;
+        }
+    }
+    else if (_weaponState == WeaponState::ChangingUp)
+    {
+        _weaponChangeTimer += (float)delta;
+        _weaponChangeOffset = 1.0f - glm::clamp(1.0f - glm::pow(1.0f - (_weaponChangeTimer / WeaponChangeTime), 5.0f), 0.0f, 1.0f);
+        if (_weaponChangeTimer >= WeaponChangeTime)
+        {
+            _weaponChangeTimer = 0.0f;
+            _weaponState = WeaponState::Ready;
+        }
+    }
+}
 } // namespace Game

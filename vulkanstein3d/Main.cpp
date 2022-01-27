@@ -213,7 +213,7 @@ int main(int argc, char* argv[])
         const auto& fpsCamera = registry.get<Game::FPSCamera>(level->GetPlayerEntity());
 
         auto view = glm::lookAt(playerXform.position, playerXform.position + fpsCamera.front, fpsCamera.up);
-        auto proj = glm::perspective(glm::radians(45.0f), renderer._swapchain->GetExtent().width / (float)renderer._swapchain->GetExtent().height, 0.1f, 1000.0f);
+        auto proj = glm::perspective(glm::radians(65.0f), renderer._swapchain->GetExtent().width / (float)renderer._swapchain->GetExtent().height, 0.1f, 500.0f);
 
         FrameConstants consts{(float)totalTime, (float)mousepos.x / (float)renderer._swapchain->GetExtent().width, (float)mousepos.y / (float)renderer._swapchain->GetExtent().height, 0.0f};
         FrameConstantsUBO constsUbo{view, proj, (float)totalTime, (float)mousepos.x / (float)renderer._swapchain->GetExtent().width, (float)mousepos.y / (float)renderer._swapchain->GetExtent().height, 0.0f};
@@ -258,8 +258,23 @@ int main(int argc, char* argv[])
         float screenWidth = (float)renderer._swapchain->GetExtent().width;
         float size = screenWidth / 3.0f;
 
+        int knife = 416;
+        int pistol = 421;
+        int kk = 426;
+        int gt = 431;
+        int current = 0;
+        if (level->_currentWeapon == Game::Level::Weapon::Knife)
+            current = knife;
+        if (level->_currentWeapon == Game::Level::Weapon::Pistol)
+            current = pistol;
+        if (level->_currentWeapon == Game::Level::Weapon::MachineGun)
+            current = kk;
+        if (level->_currentWeapon == Game::Level::Weapon::Gatling)
+            current = gt;
         glm::vec2 weaponSize{size, size};
-        HudPushConstants hudPushConstants{orthoMat, weaponSize, {screenWidth / 2.0f, screenHeight - size / 2.0f}, 421};
+
+        HudPushConstants hudPushConstants{orthoMat, weaponSize, {screenWidth / 2.0f, (screenHeight - size / 2.0f) + (size / 4.0) * level->_weaponChangeOffset}, 
+            current + level->_weaponFrameOffset };
         renderer.Draw(6, 1, hudMaterial, &hudPushConstants, sizeof(HudPushConstants));
 
         renderer.End();
