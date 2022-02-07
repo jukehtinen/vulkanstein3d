@@ -94,6 +94,12 @@ struct Sprite
     int spriteIndex{0};
 };
 
+struct SpriteAnimation
+{
+    int baseIndex{0};
+    float facingAngle{0};
+};
+
 struct Transform
 {
     glm::vec3 position;

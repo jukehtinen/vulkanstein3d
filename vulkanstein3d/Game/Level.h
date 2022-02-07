@@ -76,12 +76,14 @@ class Level
     void CreateDoorEntity(int index, uint32_t flags);
     void CreateSecretDoorEntity(int index);
     void CreateElevatorEntity(int index);
+    void CreateEnemyEntity(int index, int objectId);
 
     glm::vec3 IndexToPosition(int index, float height = 0.0f);
 
     void UpdateInput(double delta);
     void UpdateDoors(double delta);
     void UpdateWeapon(double delta);
+    void UpdateAnimations(double delta);
 
     bool IsCollision(const glm::vec3& pos);
 
@@ -100,5 +102,7 @@ class Level
     WeaponState _weaponState{WeaponState::Ready};
     Weapon _nextWeapon{Weapon::Pistol};
     float _weaponChangeTimer{0.0f};
+    
+    float _animationTimer{0.0f};
 };
 } // namespace Game

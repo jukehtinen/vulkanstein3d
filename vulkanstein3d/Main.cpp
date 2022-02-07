@@ -155,7 +155,7 @@ int main(int argc, char* argv[])
     std::vector<Sprite> spriteModelMats;
 
     auto frameConstsUbo = Rendering::Buffer::CreateUniformBuffer(renderer._device, sizeof(FrameConstantsUBO));
-    auto modelStorage = Rendering::Buffer::CreateStorageBuffer(renderer._device, sizeof(Sprite) * 256);
+    auto modelStorage = Rendering::Buffer::CreateStorageBuffer(renderer._device, sizeof(Sprite) * 512);
 
     CreateMaterials(renderer._device, assets, frameConstsUbo, modelStorage);
 

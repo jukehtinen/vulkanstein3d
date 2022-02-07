@@ -89,17 +89,6 @@ void Level::CreateEntities()
         if (objectId == 0)
             continue;
 
-        // Secret door
-        if (objectId == 98)
-        {
-            CreateSecretDoorEntity(i);
-            continue;
-        }
-
-        // Skip enemies and such for now
-        if (objectId >= 90)
-            continue;
-
         switch ((Wolf3dLoaders::MapObjects)objectId)
         {
         case MapObjects::PlayerNorth:
@@ -122,9 +111,25 @@ void Level::CreateEntities()
         case MapObjects::ExtraLife:
             CreateItemEntity(i);
             continue;
+        case MapObjects::SecretDoor:
+            CreateSecretDoorEntity(i);
+            continue;
+        case MapObjects::EndGameTrigger:
+            // todo
+            continue;
         }
 
-        CreateSceneryEntity(i, objectId);
+        if (objectId < 90)
+        {
+            CreateSceneryEntity(i, objectId);
+            continue;
+        }
+
+        if (objectId >= (int)MapObjects::EnemyFirst)
+        {
+            CreateEnemyEntity(i, objectId);
+            continue;
+        }
     }
 }
 
@@ -136,13 +141,13 @@ void Level::CreatePlayerEntity(int index, int objectId)
     _registry.emplace<Player>(_player);
     _registry.emplace<Transform>(_player, IndexToPosition(index, 35.0f));
     auto& fpsCamera = _registry.emplace<FPSCamera>(_player);
-    if (objectId == 19)
+    if (objectId == (int)Wolf3dLoaders::MapObjects::PlayerNorth)
         fpsCamera.yaw = 270;
-    if (objectId == 20)
+    if (objectId == (int)Wolf3dLoaders::MapObjects::PlayerEast)
         fpsCamera.yaw = 0;
-    if (objectId == 21)
+    if (objectId == (int)Wolf3dLoaders::MapObjects::PlayerSouth)
         fpsCamera.yaw = 90;
-    if (objectId == 22)
+    if (objectId == (int)Wolf3dLoaders::MapObjects::PlayerWest)
         fpsCamera.yaw = 180;
 }
 
@@ -162,7 +167,7 @@ void Level::CreateSceneryEntity(int index, int objectId)
     _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f));
 
     const std::vector<int> blocksShooting{30, 38, 39, 67, 69};
-    const std::vector<int> blocksMovement{24, 25, 26, 28, 30, 31, 32, 33, 34, 35, 36, 38, 39, 40, 41, 58, 59, 60, 62, 63, 67, 68, 69};
+    const std::vector<int> blocksMovement{24, 25, 26, 28, 30, 31, 33, 34, 35, 36, 38, 39, 40, 41, 58, 59, 60, 62, 63, 67, 68, 69};
 
     uint32_t flags = 0;
     if (std::find(blocksShooting.begin(), blocksShooting.end(), objectId) != blocksShooting.end())
@@ -217,6 +222,20 @@ void Level::CreateElevatorEntity(int index)
     _registry.emplace<Renderable>(entity, TileElevatorSwitchOff);
 }
 
+void Level::CreateEnemyEntity(int index, int objectId)
+{
+    if (objectId == 124) // dead guard
+        return;
+
+    auto& mob = Wolf3dLoaders::Enemies[objectId - (int)Wolf3dLoaders::MapObjects::EnemyFirst];
+
+    const auto entity = _registry.create();
+    _registry.emplace<Transform>(entity, IndexToPosition(index, 5.0f), glm::vec3{10.0f});
+    _registry.emplace<Sprite>(entity, 50);
+    _registry.emplace<SpriteAnimation>(entity, mob.baseIndex, mob.angle);
+    //_registry.emplace<Collider>(entity);
+}
+
 void Level::Update(double delta)
 {
     auto& playerXform = _registry.get<Game::Transform>(_player);
@@ -225,6 +244,7 @@ void Level::Update(double delta)
     UpdateInput(delta);
     UpdateDoors(delta);
     UpdateWeapon(delta);
+    UpdateAnimations(delta);
 
     std::vector<entt::entity> remove;
 
@@ -467,7 +487,7 @@ void Level::UpdateDoors(double delta)
     auto doorView = _registry.view<Game::Transform, Game::Door>();
     for (auto [entity, xform, door] : doorView.each())
     {
-        door.time -= delta;
+        door.time -= (float)delta;
 
         switch (door.state)
         {
@@ -512,7 +532,7 @@ void Level::UpdateDoors(double delta)
     auto secretDoorView = _registry.view<Game::Transform, Game::SecretDoor>();
     for (auto [entity, xform, door] : secretDoorView.each())
     {
-        door.time -= delta;
+        door.time -= (float)delta;
 
         switch (door.state)
         {
@@ -552,6 +572,7 @@ void Level::UpdateWeapon(double delta)
     if (input.IsKeyDown(GLFW_KEY_4))
         changeWeapon(Weapon::Gatling);
 
+    // fixme: complicated state hacking, maybe have own func for each weapon.
     if (input.IsButtonDown(2))
     {
         if (_weaponState == WeaponState::Ready)
@@ -580,11 +601,11 @@ void Level::UpdateWeapon(double delta)
             _weaponFrameOffset++;
             _weaponChangeTimer = 0.0f;
 
-            if (_weaponFrameOffset == 3)
+            if (_weaponFrameOffset == 3 || (_currentWeapon == Weapon::Gatling && _weaponFrameOffset == 4))
             {
                 if (_currentWeapon != Weapon::Knife)
                     player.ammo--;
-                
+
                 spdlog::info("Ammo: {}", player.ammo);
             }
         }
@@ -636,5 +657,35 @@ void Level::UpdateWeapon(double delta)
             _weaponState = WeaponState::Ready;
         }
     }
+}
+
+void Level::UpdateAnimations(double delta)
+{
+    auto& playerXform = _registry.get<Game::Transform>(GetPlayerEntity());
+
+    _animationTimer += (float)delta;
+    auto animationView = _registry.view<Game::Transform, Game::Sprite, Game::SpriteAnimation>();
+    for (auto [entity, xform, sprite, spriteAnim] : animationView.each())
+    {
+        if (_animationTimer > 0.25f)
+        {
+            //spriteAnim.baseIndex++;
+        }
+
+        const auto playerToMob = glm::normalize(playerXform.position - xform.position);
+
+        auto angle = (int32_t)(glm::degrees(glm::atan(playerToMob.z, playerToMob.x)) + spriteAnim.facingAngle - (45 / 2));
+        if (angle < 0)
+            angle += 360;
+        if (angle > 360)
+            angle -= 360;
+        angle = angle % 360;
+
+        int frameRotationOffset = (7 - (int)(angle / 45));
+
+        sprite.spriteIndex = spriteAnim.baseIndex + frameRotationOffset;
+    }
+    if (_animationTimer > 0.25f)
+        _animationTimer = 0.0f;
 }
 } // namespace Game
